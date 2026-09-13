@@ -40,12 +40,12 @@ N_nav_z: 2.0
 max_vz: 1.0
 vertical_integrator_decay: 0.98
 
-# Paper-inspired FOV constraint. The safe rectangle is the physical FOV
-# multiplied by fov_margin_ratio. Controller gain rises near its boundary.
-# Defaults match fx=fy=640 and a 960x540 image. Replace with calibrated values.
-hfov_deg: 73.74
-vfov_deg: 45.72
-fov_margin_ratio: 0.80
+# Paper-style half-angle FOV constraints. These are the measured usable viewing
+# ranges of the test interceptor: horizontal +/-26.6 deg, vertical +/-20.6 deg.
+# The corresponding full FOV is 53.2 x 41.2 deg.
+# With fx=fy=640, these equal about +/-320.5 px and +/-240.6 px.
+fov_horizontal_limit_deg: 26.6
+fov_vertical_limit_deg: 20.6
 fov_barrier_gain: 0.20
 fov_barrier_max: 4.0
 fov_slowdown_start_ratio: 0.65

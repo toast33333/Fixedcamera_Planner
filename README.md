@@ -15,6 +15,9 @@ delay compensation, inertial LOS-rate estimation, and a paper-inspired FOV
 barrier while continuing to publish
 `geometry_msgs/TwistStamped` on `/mavros/setpoint_velocity/cmd_vel`.
 
+The active FOV constraints use the measured test-aircraft half angles directly:
+horizontal `+/-26.6 deg` and vertical `+/-20.6 deg`.
+
 Build and launch:
 
 ```bash

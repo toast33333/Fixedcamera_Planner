@@ -76,9 +76,10 @@ public:
         ROS_INFO("[FixedCameraIBVS] Started: fixed camera, attitude-compensated LOS, FOV barrier.");
         ROS_INFO("[FixedCameraIBVS] Visual input unchanged; detection mode=%d topic=%s.",
                  detection_mode_, detection_topic_.c_str());
-        ROS_INFO("[FixedCameraIBVS] Pose=%s, image delay=%.3f s, safe FOV=%.1f x %.1f deg.",
+        ROS_INFO("[FixedCameraIBVS] Pose=%s, image delay=%.3f s, "
+                 "FOV limits: horizontal +/-%.1f deg, vertical +/-%.1f deg.",
                  pose_topic_.c_str(), image_delay_sec_,
-                 hfov_deg_ * fov_margin_ratio_, vfov_deg_ * fov_margin_ratio_);
+                 fov_horizontal_limit_deg_, fov_vertical_limit_deg_);
     }
 
     void spin() {
@@ -147,9 +148,18 @@ private:
         nh.param("max_vz", max_vertical_velocity_, 1.0);
         nh.param("vertical_integrator_decay", vertical_integrator_decay_, 0.98);
 
-        nh.param("hfov_deg", hfov_deg_, 73.74);
-        nh.param("vfov_deg", vfov_deg_, 45.72);
-        nh.param("fov_margin_ratio", fov_margin_ratio_, 0.80);
+        // The paper defines horizontal and vertical FOV constraints as half angles.
+        // Keep the legacy full-FOV parameters as a fallback for older config files.
+        double legacy_hfov_deg = 53.2;
+        double legacy_vfov_deg = 41.2;
+        double legacy_margin_ratio = 1.0;
+        nh.param("hfov_deg", legacy_hfov_deg, 53.2);
+        nh.param("vfov_deg", legacy_vfov_deg, 41.2);
+        nh.param("fov_margin_ratio", legacy_margin_ratio, 1.0);
+        nh.param("fov_horizontal_limit_deg", fov_horizontal_limit_deg_,
+                 0.5 * legacy_hfov_deg * legacy_margin_ratio);
+        nh.param("fov_vertical_limit_deg", fov_vertical_limit_deg_,
+                 0.5 * legacy_vfov_deg * legacy_margin_ratio);
         nh.param("fov_barrier_gain", fov_barrier_gain_, 0.20);
         nh.param("fov_barrier_max", fov_barrier_max_, 4.0);
         nh.param("fov_slowdown_start_ratio", fov_slowdown_start_ratio_, 0.65);
@@ -210,7 +220,10 @@ private:
         max_yaw_rate_ = std::max(max_yaw_rate_, 0.0);
         max_vertical_velocity_ = std::max(max_vertical_velocity_, 0.0);
         max_lateral_velocity_ = std::max(max_lateral_velocity_, 0.0);
-        fov_margin_ratio_ = clampValue(fov_margin_ratio_, 0.10, 0.99);
+        fov_horizontal_limit_deg_ =
+            clampValue(fov_horizontal_limit_deg_, 1.0, 89.0);
+        fov_vertical_limit_deg_ =
+            clampValue(fov_vertical_limit_deg_, 1.0, 89.0);
         fov_barrier_max_ = std::max(fov_barrier_max_, 1.0);
         fov_slowdown_start_ratio_ = clampValue(fov_slowdown_start_ratio_, 0.0, 0.99);
         fov_min_forward_speed_ratio_ = clampValue(fov_min_forward_speed_ratio_, 0.0, 1.0);
@@ -371,24 +384,17 @@ private:
                            std::sin(elevation));
     }
 
-    double computeFovBarrierScale(double alignment_error,
-                                  double rectangular_ratio) const {
-        const double safe_half_angle = std::min(
-            degToRad(0.5 * hfov_deg_ * fov_margin_ratio_),
-            degToRad(0.5 * vfov_deg_ * fov_margin_ratio_));
-        const double k_b = std::max(1.0 - std::cos(safe_half_angle), 1e-3);
-        const double z_1 = clampValue(alignment_error, 0.0, k_b * 0.999);
-        const double cone_denominator =
-            std::max(k_b * k_b - z_1 * z_1, 1e-6);
-        const double cone_scale =
-            1.0 + fov_barrier_gain_ * z_1 / cone_denominator;
-
-        const double rho = clampValue(rectangular_ratio, 0.0, 0.999);
-        const double rectangular_scale =
+    double computeAxisFovBarrierScale(double angular_ratio) const {
+        // Axis-wise rectangular adaptation of the paper's logarithmic barrier:
+        // B(rho) = -0.5 log(1-rho^2), |rho| < 1.
+        // Its gradient contributes the rho/(1-rho^2) term. Multiplying the
+        // nominal angular error by the scale below produces the same divergence
+        // toward the configured half-FOV boundary, with an actuator-safe cap.
+        const double rho = clampValue(std::fabs(angular_ratio), 0.0, 0.999);
+        const double barrier_scale =
             1.0 + fov_barrier_gain_ * rho * rho /
                       std::max(1.0 - rho * rho, 1e-3);
-        return clampValue(std::max(cone_scale, rectangular_scale),
-                          1.0, fov_barrier_max_);
+        return clampValue(barrier_scale, 1.0, fov_barrier_max_);
     }
 
     double computeForwardSpeedScale(double fov_ratio) const {
@@ -411,17 +417,22 @@ private:
             tf::Vector3(1.0, 0.0, 0.0));
         const tf::Vector3 los_camera = bodyRayToCamera(los_body);
 
-        const double safe_h = std::max(degToRad(0.5 * hfov_deg_ * fov_margin_ratio_), 1e-3);
-        const double safe_v = std::max(degToRad(0.5 * vfov_deg_ * fov_margin_ratio_), 1e-3);
+        const double safe_h =
+            std::max(degToRad(fov_horizontal_limit_deg_), 1e-3);
+        const double safe_v =
+            std::max(degToRad(fov_vertical_limit_deg_), 1e-3);
         const double horizontal_angle = std::atan2(los_camera.x(), los_camera.z());
         const double vertical_angle = std::atan2(los_camera.y(), los_camera.z());
         const double horizontal_ratio = std::fabs(horizontal_angle) / safe_h;
         const double vertical_ratio = std::fabs(vertical_angle) / safe_v;
         const double fov_ratio = std::max(horizontal_ratio, vertical_ratio);
 
-        const double alignment_dot = clampValue(desired_los_body_.dot(los_body), -1.0, 1.0);
-        const double alignment_error = 1.0 - alignment_dot;
-        const double barrier_scale = computeFovBarrierScale(alignment_error, fov_ratio);
+        const double horizontal_barrier_scale =
+            computeAxisFovBarrierScale(horizontal_ratio);
+        const double vertical_barrier_scale =
+            computeAxisFovBarrierScale(vertical_ratio);
+        const double barrier_scale =
+            std::max(horizontal_barrier_scale, vertical_barrier_scale);
         const double speed_scale = computeForwardSpeedScale(fov_ratio);
 
         const double current_yaw_to_los = std::atan2(los_body.y(), los_body.x());
@@ -451,7 +462,7 @@ private:
         if (yaw_control_enabled_ || fov_emergency) {
             const double position_term =
                 std::fabs(predicted_u - desired_u_offset_px_) > pixel_threshold_x_
-                    ? yaw_position_gain_ * barrier_scale * yaw_error
+                    ? yaw_position_gain_ * horizontal_barrier_scale * yaw_error
                     : 0.0;
             yaw_rate_command = clampValue(
                 position_term + yaw_rate_gain_ * azimuth_filter_.rate(),
@@ -479,7 +490,7 @@ private:
                 vertical_velocity_integral_,
                 -max_vertical_velocity_, max_vertical_velocity_);
             vertical_velocity = clampValue(
-                vertical_position_gain_ * barrier_scale * elevation_error +
+                vertical_position_gain_ * vertical_barrier_scale * elevation_error +
                     vertical_velocity_integral_,
                 -max_vertical_velocity_, max_vertical_velocity_);
         }
@@ -659,9 +670,8 @@ private:
     double vertical_integrator_decay_ = 0.98;
     double vertical_velocity_integral_ = 0.0;
 
-    double hfov_deg_ = 73.74;
-    double vfov_deg_ = 45.72;
-    double fov_margin_ratio_ = 0.80;
+    double fov_horizontal_limit_deg_ = 26.6;
+    double fov_vertical_limit_deg_ = 20.6;
     double fov_barrier_gain_ = 0.20;
     double fov_barrier_max_ = 4.0;
     double fov_slowdown_start_ratio_ = 0.65;

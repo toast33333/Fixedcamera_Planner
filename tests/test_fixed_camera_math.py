@@ -28,6 +28,10 @@ def fov_barrier_scale(ratio, gain=0.2, maximum=4.0):
     return max(1.0, min(scale, maximum))
 
 
+def angular_ratio(angle_deg, half_angle_limit_deg):
+    return abs(angle_deg) / half_angle_limit_deg
+
+
 class FixedCameraMathTest(unittest.TestCase):
     def test_optical_center_maps_to_body_forward(self):
         self.assertEqual(camera_to_body((0.0, 0.0, 1.0)), (1.0, 0.0, 0.0))
@@ -61,6 +65,12 @@ class FixedCameraMathTest(unittest.TestCase):
         self.assertEqual(values, sorted(values))
         self.assertEqual(values[0], 1.0)
         self.assertLessEqual(values[-1], 4.0)
+
+    def test_measured_half_angles_are_the_constraint_boundaries(self):
+        self.assertAlmostEqual(angular_ratio(26.6, 26.6), 1.0)
+        self.assertAlmostEqual(angular_ratio(-26.6, 26.6), 1.0)
+        self.assertAlmostEqual(angular_ratio(20.6, 20.6), 1.0)
+        self.assertAlmostEqual(angular_ratio(-20.6, 20.6), 1.0)
 
 
 if __name__ == "__main__":

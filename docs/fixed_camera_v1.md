@@ -58,14 +58,22 @@ and using a barrier Lyapunov term. V1 keeps the same idea while retaining the
 existing velocity interface:
 
 - the desired LOS defaults to the optical center;
-- `fov_margin_ratio` defines an inner safe rectangle;
-- control gain grows as predicted LOS approaches that boundary;
+- the measured half-angle limits are used directly: horizontal `+/-26.6 deg`
+  and vertical `+/-20.6 deg` (full FOV `53.2 x 41.2 deg`);
+- horizontal and vertical logarithmic barrier terms are evaluated separately;
+- control gain grows as predicted LOS approaches either boundary;
 - yaw control bypasses the normal speed gate near the boundary;
 - forward speed decreases near the boundary to leave time for recentering.
 
 The debug topic `/fixed_camera_ibvs/fov_state` publishes horizontal ratio,
 vertical ratio and applied barrier scale. A ratio of `1.0` is the configured
 safe boundary.
+
+For each axis, `rho` is the absolute predicted image angle divided by its
+half-angle limit. The implemented gain multiplier is
+`1 + k * rho^2 / (1 - rho^2)`, capped by `fov_barrier_max` to respect actuator
+limits. This is the rectangular, axis-wise form of the paper's logarithmic
+barrier idea. `rho = 1` represents the measured usable FOV boundary.
 
 ## Important limitation
 
