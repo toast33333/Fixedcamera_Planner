@@ -47,6 +47,19 @@ The attitude history is fed by `/mavros/imu/data` and also accepts
 `/mavros/local_position/pose` as a fallback. Both topics carry the flight
 controller attitude through MAVROS; no raw MAVLink parser is needed.
 
+## Fixed camera coordinate convention
+
+- Camera optical frame: `+z` forward through the lens, `+x` image-right,
+  `+y` image-down.
+- Aircraft body frame: ROS FLU, `+x` forward, `+y` left, `+z` up.
+- With zero installation correction, camera `+z` maps to body `+x`.
+- The configured installation is roll `0 deg`, yaw `0 deg`, and the optical
+  axis raised `20 deg`. Under the FLU right-hand convention this is represented
+  by `camera_mount_pitch_deg: -20.0`.
+
+The center optical ray therefore points in body coordinates approximately as
+`[cos(20 deg), 0, sin(20 deg)] = [0.9397, 0, 0.3420]`.
+
 `image_delay_sec` selects the attitude-history sample associated with the image.
 This preserves the headerless visual messages while providing a practical
 delay correction. Accurate calibration of this delay is important.

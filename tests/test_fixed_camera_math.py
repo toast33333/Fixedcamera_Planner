@@ -22,6 +22,15 @@ def inverse_rotate_yaw(vector, yaw):
     return rotate_yaw(vector, -yaw)
 
 
+def rotate_body_pitch(vector, pitch):
+    x_value, y_value, z_value = vector
+    return (
+        math.cos(pitch) * x_value + math.sin(pitch) * z_value,
+        y_value,
+        -math.sin(pitch) * x_value + math.cos(pitch) * z_value,
+    )
+
+
 def fov_barrier_scale(ratio, gain=0.2, maximum=4.0):
     limited = max(0.0, min(ratio, 0.999))
     scale = 1.0 + gain * limited * limited / max(1.0 - limited * limited, 1e-3)
@@ -39,6 +48,13 @@ class FixedCameraMathTest(unittest.TestCase):
     def test_pixel_right_requires_negative_body_yaw(self):
         ray_body = camera_to_body((0.25, 0.0, 1.0))
         self.assertLess(math.atan2(ray_body[1], ray_body[0]), 0.0)
+
+    def test_negative_twenty_degree_mount_pitch_raises_optical_axis(self):
+        optical_center_body = camera_to_body((0.0, 0.0, 1.0))
+        mounted_ray = rotate_body_pitch(optical_center_body, math.radians(-20.0))
+        self.assertAlmostEqual(mounted_ray[0], math.cos(math.radians(20.0)), places=12)
+        self.assertAlmostEqual(mounted_ray[1], 0.0, places=12)
+        self.assertAlmostEqual(mounted_ray[2], math.sin(math.radians(20.0)), places=12)
 
     def test_attitude_compensation_keeps_inertial_los_fixed(self):
         target_world = (1.0, 0.0, 0.0)

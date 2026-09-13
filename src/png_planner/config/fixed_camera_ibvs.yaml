@@ -12,9 +12,10 @@ cx: 480.0
 cy: 270.0
 
 # Fixed camera installation correction relative to a forward-looking mount.
-# Positive axes follow ROS body FLU. Adjust these after mechanical calibration.
+# ROS body frame is FLU: +x forward, +y left, +z up. Camera optical frame is
+# +z forward, +x right, +y down. A negative body-y pitch raises the optical axis.
 camera_mount_roll_deg: 0.0
-camera_mount_pitch_deg: 0.0
+camera_mount_pitch_deg: -20.0
 camera_mount_yaw_deg: 0.0
 desired_u_offset_px: 0.0
 desired_v_offset_px: 0.0

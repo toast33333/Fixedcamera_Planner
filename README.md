@@ -18,6 +18,9 @@ barrier while continuing to publish
 The active FOV constraints use the measured test-aircraft half angles directly:
 horizontal `+/-26.6 deg` and vertical `+/-20.6 deg`.
 
+The fixed camera optical axis is mounted `20 deg` upward relative to aircraft
+forward, with zero roll/yaw offset (`camera_mount_pitch_deg: -20.0` in ROS FLU).
+
 Build and launch:
 
 ```bash
