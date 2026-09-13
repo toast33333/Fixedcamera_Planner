@@ -1,0 +1,30 @@
+<launch>
+  <arg name="common_config" default="$(find png_planner)/config/rp_common.yaml" />
+  <arg name="serial_device" default="/dev/ttyUSB0" />
+  <arg name="serial_baud" default="115200" />
+  <arg name="tracked_angle_topic" default="/gimbal_angles" />
+  <arg name="attack_enable_topic" default="/png_start" />
+  <arg name="pose_topic" default="/mavros/local_position/pose" />
+  <arg name="ff_source_topic" default="/mavros/setpoint_velocity/cmd_vel" />
+
+  <node pkg="png_planner" type="rpy_pid_ff_ctrl" name="rpy_pid_ff_ctrl" output="screen">
+    <rosparam command="load" file="$(arg common_config)" />
+    <param name="serial_device" value="$(arg serial_device)" />
+    <param name="serial_baud" value="$(arg serial_baud)" />
+    <param name="tracked_angle_topic" value="$(arg tracked_angle_topic)" />
+    <param name="attack_enable_topic" value="$(arg attack_enable_topic)" />
+    <param name="pose_topic" value="$(arg pose_topic)" />
+    <param name="ff_source_topic" value="$(arg ff_source_topic)" />
+    <param name="enable_body_yaw_compensation" value="true" />
+    <param name="start_enabled" value="false" />
+    <param name="yaw_kp" value="0.02" />
+    <param name="yaw_ki" value="0.0" />
+    <param name="yaw_kd" value="0.005" />
+    <param name="pitch_kp" value="0.02" />
+    <param name="pitch_ki" value="0.0" />
+    <param name="pitch_kd" value="0.005" />
+    <param name="yaw_delta_limit_deg" value="2.0" />
+    <param name="pitch_delta_limit_deg" value="2.0" />
+    <param name="yaw_ff_limit_deg" value="5.0" />
+  </node>
+</launch>

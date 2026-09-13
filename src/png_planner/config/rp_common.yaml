@@ -1,0 +1,56 @@
+detection_mode: 0
+detection_topic: /object_kcf
+velocity_topic: /mavros/local_position/velocity_local
+
+fx: 640.0
+fy: 640.0
+cx: 480.0
+cy: 270.0
+
+bbox_center_is_offset: true
+y_up_positive: true
+
+V_default: 5.0
+N_nav: 2.0
+N_nav_z: 2.0
+
+max_yaw_rate: 1.0
+k_yaw: 1.5
+k_yaw_d: 0.3
+yaw_enable_speed_ratio: 0.4
+
+use_real_dt: true
+step_dt: 0.02
+pixel_thr: 5.0
+pixel_thr_y: 5.0
+v_center_alpha: 0.2
+
+lambda_filt_alpha: 0.2
+lambda_window_size: 3
+lambda_kalman_q_position: 0.0001
+lambda_kalman_q_rate: 0.5
+lambda_kalman_r: 0.0002
+
+gamma_filt_alpha: 0.2
+gamma_window_size: 3
+gamma_kalman_q_position: 0.0001
+gamma_kalman_q_rate: 0.5
+gamma_kalman_r: 0.0002
+
+k_z_ff: 1.0
+max_vz: 1.0
+
+gimbal_device: /dev/ttyS7
+gimbal_pitch_bias_deg: 0.0
+gimbal_pitch_gain: 1.0
+gimbal_pitch_sign: 1.0
+gimbal_pitch_kp: 1.0
+gimbal_pitch_ki: 0.0
+gimbal_pitch_kd: 0.0
+gimbal_pitch_i_limit_deg: 10.0
+gimbal_pitch_d_alpha: 0.2
+gimbal_pitch_integral_decay: 0.98
+gimbal_pitch_delta_limit_deg: 2.0
+gimbal_pitch_limit_deg: 30.0
+gimbal_pitch_los_sign: 1.0
+gimbal_pitch_los_thr_deg: 1.0

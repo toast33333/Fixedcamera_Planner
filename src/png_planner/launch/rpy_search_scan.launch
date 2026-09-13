@@ -1,0 +1,18 @@
+<launch>
+  <arg name="tracked_angle_topic" default="/gimbal_angles" />
+  <arg name="control_rate" default="20.0" />
+  <arg name="yaw_speed_deg" default="12.0" />
+  <arg name="yaw_min_deg" default="-25.0" />
+  <arg name="yaw_max_deg" default="25.0" />
+  <arg name="pitch_dwell_sec" default="0.5" />
+
+  <node pkg="png_planner" type="rpy_search_scan" name="rpy_search_scan" output="screen">
+    <param name="tracked_angle_topic" value="$(arg tracked_angle_topic)" />
+    <param name="control_rate" value="$(arg control_rate)" />
+    <param name="yaw_speed_deg" value="$(arg yaw_speed_deg)" />
+    <param name="yaw_min_deg" value="$(arg yaw_min_deg)" />
+    <param name="yaw_max_deg" value="$(arg yaw_max_deg)" />
+    <param name="pitch_dwell_sec" value="$(arg pitch_dwell_sec)" />
+    <param name="start_enabled" value="true" />
+  </node>
+</launch>

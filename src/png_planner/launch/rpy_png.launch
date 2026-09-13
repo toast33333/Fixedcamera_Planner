@@ -1,0 +1,34 @@
+<launch>
+  <arg name="common_config" default="$(find png_planner)/config/rp_common.yaml" />
+  <arg name="gimbal_angle_topic" default="/gimbal_angles" />
+  <arg name="V_forward" default="5.0" />
+  <arg name="N_nav" default="3.0" />
+  <arg name="v_lat_max" default="3.0" />
+  <arg name="tau_lat" default="0.5" />
+  <arg name="v_z_max" default="2.0" />
+  <arg name="start_gimbal_controller" default="true" />
+  <arg name="gimbal_serial_device" default="/dev/ttyS7" />
+  <arg name="gimbal_serial_baud" default="115200" />
+  <arg name="gimbal_detection_mode" default="0" />
+  <arg name="gimbal_detection_topic" default="/object_kcf" />
+
+  <node if="$(arg start_gimbal_controller)"
+        pkg="png_planner" type="gimbal_bbox_pid_serial" name="gimbal_bbox_pid_serial" output="screen">
+    <param name="serial_device" value="$(arg gimbal_serial_device)" />
+    <param name="serial_baud" value="$(arg gimbal_serial_baud)" />
+    <param name="detection_mode" value="$(arg gimbal_detection_mode)" />
+    <param name="detection_topic" value="$(arg gimbal_detection_topic)" />
+    <param name="gimbal_angle_topic" value="$(arg gimbal_angle_topic)" />
+  </node>
+
+  <node pkg="png_planner" type="rpy_png" name="rpy_png" output="screen">
+    <rosparam command="load" file="$(arg common_config)" />
+    <param name="gimbal_angle_topic" value="$(arg gimbal_angle_topic)" />
+    <param name="V_forward" value="$(arg V_forward)" />
+    <param name="N_nav" value="$(arg N_nav)" />
+    <param name="v_lat_max" value="$(arg v_lat_max)" />
+    <param name="tau_lat" value="$(arg tau_lat)" />
+    <param name="v_z_max" value="$(arg v_z_max)" />
+    <param name="lost_vz_hold" value="0.0" />
+  </node>
+</launch>

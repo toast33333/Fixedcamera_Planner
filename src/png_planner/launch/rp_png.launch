@@ -1,0 +1,11 @@
+<launch>
+  <arg name="common_config" default="$(find png_planner)/config/rp_common.yaml" />
+
+  <node pkg="png_planner" type="rp_png" name="rp_png" output="screen">
+    <rosparam command="load" file="$(arg common_config)" />
+    <param name="enable_height_control" value="true" />
+    <param name="gimbal_enable" value="true" />
+    <param name="reset_gimbal_on_target_loss" value="true" />
+    <param name="enable_gimbal_pitch_cmd_generation" value="true" />
+  </node>
+</launch>

@@ -1,0 +1,19 @@
+<launch>
+  <arg name="publish_rate" default="10.0" />
+  <arg name="relative_distance_m" default="100.0" />
+  <arg name="relative_bearing_deg" default="0.0" />
+  <arg name="relative_altitude_m" default="0.0" />
+  <arg name="speed_mps" default="60.0" />
+  <arg name="course_deg" default="90.0" />
+  <arg name="vertical_speed_mps" default="0.0" />
+
+  <node pkg="png_planner" type="target_sitl_sim" name="target_sitl_sim" output="screen">
+    <param name="publish_rate" value="$(arg publish_rate)" />
+    <param name="relative_distance_m" value="$(arg relative_distance_m)" />
+    <param name="relative_bearing_deg" value="$(arg relative_bearing_deg)" />
+    <param name="relative_altitude_m" value="$(arg relative_altitude_m)" />
+    <param name="speed_mps" value="$(arg speed_mps)" />
+    <param name="course_deg" value="$(arg course_deg)" />
+    <param name="vertical_speed_mps" value="$(arg vertical_speed_mps)" />
+  </node>
+</launch>

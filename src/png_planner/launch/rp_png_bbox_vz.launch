@@ -1,0 +1,8 @@
+<launch>
+  <arg name="common_config" default="$(find png_planner)/config/rp_common.yaml" />
+
+  <node pkg="png_planner" type="rp_png_bbox_vz" name="rp_png_bbox_vz" output="screen">
+    <rosparam command="load" file="$(arg common_config)" />
+    <param name="enable_height_control" value="true" />
+  </node>
+</launch>

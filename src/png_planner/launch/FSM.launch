@@ -1,0 +1,15 @@
+<launch>
+  <arg name="detection_mode" default="0" />
+  <arg name="detection_topic" default="/object_kcf" />
+  <arg name="fsm_update_rate" default="5.0" />
+  <arg name="search_timeout_sec" default="8.0" />
+  <arg name="png_trigger_dist" default="200.0" />
+
+  <node pkg="png_planner" type="FSM" name="strategy_fsm" output="screen">
+    <param name="detection_mode" value="$(arg detection_mode)" />
+    <param name="detection_topic" value="$(arg detection_topic)" />
+    <param name="fsm_update_rate" value="$(arg fsm_update_rate)" />
+    <param name="search_timeout_sec" value="$(arg search_timeout_sec)" />
+    <param name="png_trigger_dist" value="$(arg png_trigger_dist)" />
+  </node>
+</launch>

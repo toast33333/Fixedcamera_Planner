@@ -1,0 +1,23 @@
+<launch>
+  <arg name="common_config" default="$(find png_planner)/config/rp_common.yaml" />
+  <arg name="gimbal_angle_topic" default="/gimbal_angles" />
+  <arg name="start_gimbal_controller" default="true" />
+  <arg name="gimbal_serial_device" default="/dev/ttyS7" />
+  <arg name="gimbal_serial_baud" default="115200" />
+  <arg name="gimbal_detection_mode" default="0" />
+  <arg name="gimbal_detection_topic" default="/object_kcf" />
+
+  <node if="$(arg start_gimbal_controller)"
+        pkg="png_planner" type="gimbal_bbox_pid_serial" name="gimbal_bbox_pid_serial" output="screen">
+    <param name="serial_device" value="$(arg gimbal_serial_device)" />
+    <param name="serial_baud" value="$(arg gimbal_serial_baud)" />
+    <param name="detection_mode" value="$(arg gimbal_detection_mode)" />
+    <param name="detection_topic" value="$(arg gimbal_detection_topic)" />
+    <param name="gimbal_angle_topic" value="$(arg gimbal_angle_topic)" />
+  </node>
+
+  <node pkg="png_planner" type="rpy_los_no_alt" name="rpy_los_no_alt" output="screen">
+    <rosparam command="load" file="$(arg common_config)" />
+    <param name="gimbal_angle_topic" value="$(arg gimbal_angle_topic)" />
+  </node>
+</launch>
