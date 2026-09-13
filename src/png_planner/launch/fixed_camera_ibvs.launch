@@ -1,0 +1,14 @@
+<launch>
+  <arg name="config" default="$(find png_planner)/config/fixed_camera_ibvs.yaml" />
+  <arg name="detection_mode" default="0" />
+  <arg name="detection_topic" default="/object_kcf" />
+
+  <node pkg="png_planner"
+        type="fixed_camera_ibvs"
+        name="fixed_camera_ibvs"
+        output="screen">
+    <rosparam command="load" file="$(arg config)" />
+    <param name="detection_mode" value="$(arg detection_mode)" />
+    <param name="detection_topic" value="$(arg detection_topic)" />
+  </node>
+</launch>

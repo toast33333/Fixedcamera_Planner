@@ -302,3 +302,7 @@ target_link_libraries(FSM ${catkin_LIBRARIES} ${GEOGRAPHICLIB_LIBRARY})
 add_executable(target_sitl_sim src/target_sitl_sim.cpp)
 add_dependencies(target_sitl_sim ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(target_sitl_sim ${catkin_LIBRARIES} ${GEOGRAPHICLIB_LIBRARY})
+
+add_executable(fixed_camera_ibvs src/fixed_camera_ibvs.cpp)
+add_dependencies(fixed_camera_ibvs ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(fixed_camera_ibvs ${catkin_LIBRARIES})

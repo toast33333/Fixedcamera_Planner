@@ -1,5 +1,39 @@
 # png_planner_ws
 
+> Fixed-camera development now lives in the new `fixed_camera_ibvs` node. The
+> original gimbal controllers remain unchanged as a comparison baseline.
+
+## Fixed-camera V1
+
+The fixed-camera controller keeps the existing visual interfaces:
+
+- `kcf_msgs/Bbox` on `/object_kcf`
+- `detection_msgs/Detection` on `/object_detections`
+
+It adds quaternion-based aircraft-attitude compensation, configurable image
+delay compensation, inertial LOS-rate estimation, and a paper-inspired FOV
+barrier while continuing to publish
+`geometry_msgs/TwistStamped` on `/mavros/setpoint_velocity/cmd_vel`.
+
+Build and launch:
+
+```bash
+catkin_make
+source devel/setup.bash
+roslaunch png_planner fixed_camera_ibvs.launch
+```
+
+For `detection_msgs/Detection`:
+
+```bash
+roslaunch png_planner fixed_camera_ibvs.launch \
+  detection_mode:=1 detection_topic:=/object_detections
+```
+
+Configuration is in `src/png_planner/config/fixed_camera_ibvs.yaml`. Design,
+calibration order, and current limitations are documented in
+`docs/fixed_camera_v1.md`.
+
 基于 ROS1 catkin 的视觉制导工作区，核心目标是根据图像检测框驱动无人机进行偏航跟踪、2D PNG 导引和 3D PNG 导引。
 
 当前工作区主要包含 3 个包：

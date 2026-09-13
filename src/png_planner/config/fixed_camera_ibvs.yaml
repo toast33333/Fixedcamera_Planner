@@ -1,0 +1,79 @@
+# Visual interface (unchanged from the existing controller)
+detection_mode: 0
+detection_topic: /object_kcf
+minimum_detection_score: 0.0
+bbox_center_is_offset: true
+y_up_positive: true
+
+# Camera intrinsics
+fx: 640.0
+fy: 640.0
+cx: 480.0
+cy: 270.0
+
+# Fixed camera installation correction relative to a forward-looking mount.
+# Positive axes follow ROS body FLU. Adjust these after mechanical calibration.
+camera_mount_roll_deg: 0.0
+camera_mount_pitch_deg: 0.0
+camera_mount_yaw_deg: 0.0
+desired_u_offset_px: 0.0
+desired_v_offset_px: 0.0
+
+# Existing velocity-controller interface
+pose_topic: /mavros/local_position/pose
+attitude_topic: /mavros/imu/data
+velocity_topic: /mavros/local_position/velocity_local
+command_topic: /mavros/setpoint_velocity/cmd_vel
+V_default: 5.0
+lost_forward_speed: 5.0
+N_nav: 2.0
+max_lateral_velocity: 2.0
+k_yaw: 1.5
+k_yaw_d: 0.3
+max_yaw_rate: 1.0
+yaw_enable_speed_ratio: 0.4
+
+# Vertical channel
+enable_height_control: true
+k_z_ff: 1.0
+N_nav_z: 2.0
+max_vz: 1.0
+vertical_integrator_decay: 0.98
+
+# Paper-inspired FOV constraint. The safe rectangle is the physical FOV
+# multiplied by fov_margin_ratio. Controller gain rises near its boundary.
+# Defaults match fx=fy=640 and a 960x540 image. Replace with calibrated values.
+hfov_deg: 73.74
+vfov_deg: 45.72
+fov_margin_ratio: 0.80
+fov_barrier_gain: 0.20
+fov_barrier_max: 4.0
+fov_slowdown_start_ratio: 0.65
+fov_min_forward_speed_ratio: 0.25
+fov_emergency_yaw_ratio: 0.85
+
+# Attitude and image-delay compensation
+enable_attitude_compensation: true
+image_delay_sec: 0.08
+max_los_prediction_sec: 0.25
+pose_history_sec: 1.0
+lost_timeout: 0.30
+control_rate: 50.0
+use_real_dt: true
+step_dt: 0.02
+pixel_thr: 5.0
+pixel_thr_y: 5.0
+
+# Inertial LOS azimuth/elevation filters
+lambda_kalman_q_position: 0.0001
+lambda_kalman_q_rate: 0.5
+lambda_kalman_r: 0.0002
+gamma_kalman_q_position: 0.0001
+gamma_kalman_q_rate: 0.5
+gamma_kalman_r: 0.0002
+
+# Optional diagnostics (Vector3Stamped)
+# los_world: x/y/z unit LOS in the MAVROS local frame
+# fov_state: x=horizontal ratio, y=vertical ratio, z=barrier scale
+los_debug_topic: /fixed_camera_ibvs/los_world
+fov_debug_topic: /fixed_camera_ibvs/fov_state

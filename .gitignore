@@ -1,0 +1,12 @@
+build/
+devel/
+log/
+tmp/
+*.bag
+*.rknn
+*.zip
+*.pyc
+__pycache__/
+*.swo
+*.swp
+*~
