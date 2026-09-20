@@ -1,0 +1,66 @@
+# Controller settings used only by the two-PX4 Gazebo platform-validation run.
+# The detector topic and message type remain identical to the real code.
+detection_mode: 0
+detection_topic: /object_kcf
+minimum_detection_score: 0.0
+bbox_center_is_offset: true
+y_up_positive: true
+
+fx: 640.0
+fy: 640.0
+cx: 480.0
+cy: 270.0
+
+camera_mount_roll_deg: 0.0
+camera_mount_pitch_deg: -20.0
+camera_mount_yaw_deg: 0.0
+desired_u_offset_px: 0.0
+desired_v_offset_px: 0.0
+
+pose_topic: /interceptor/mavros/local_position/pose
+attitude_topic: /interceptor/mavros/imu/data
+velocity_topic: /interceptor/mavros/local_position/velocity_local
+command_topic: /fixed_camera_sim/ibvs_cmd
+V_default: 4.5
+lost_forward_speed: 0.0
+N_nav: 2.0
+max_lateral_velocity: 2.0
+k_yaw: 1.5
+k_yaw_d: 0.3
+max_yaw_rate: 1.0
+yaw_enable_speed_ratio: 0.4
+
+enable_height_control: true
+k_z_ff: 1.0
+N_nav_z: 2.0
+max_vz: 1.0
+vertical_integrator_decay: 0.98
+
+fov_horizontal_limit_deg: 26.6
+fov_vertical_limit_deg: 20.6
+fov_barrier_gain: 0.20
+fov_barrier_max: 4.0
+fov_slowdown_start_ratio: 0.65
+fov_min_forward_speed_ratio: 0.25
+fov_emergency_yaw_ratio: 0.85
+
+enable_attitude_compensation: true
+image_delay_sec: 0.0
+max_los_prediction_sec: 0.20
+pose_history_sec: 1.0
+lost_timeout: 0.30
+control_rate: 50.0
+use_real_dt: true
+step_dt: 0.02
+pixel_thr: 5.0
+pixel_thr_y: 5.0
+
+lambda_kalman_q_position: 0.0001
+lambda_kalman_q_rate: 0.5
+lambda_kalman_r: 0.0002
+gamma_kalman_q_position: 0.0001
+gamma_kalman_q_rate: 0.5
+gamma_kalman_r: 0.0002
+
+los_debug_topic: /fixed_camera_ibvs/los_world
+fov_debug_topic: /fixed_camera_ibvs/fov_state

@@ -242,6 +242,7 @@ install(DIRECTORY launch config
 catkin_install_python(PROGRAMS
   scripts/pose_cmd_tf_broadcaster.py
   scripts/gimbal_keyboard_rpy_test.py
+  scripts/px4_multisim_experiment.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

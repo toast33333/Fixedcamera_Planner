@@ -1,0 +1,46 @@
+<launch>
+  <arg name="results_dir" default="/tmp/fixed_camera_multisim" />
+
+  <!-- PX4 instances are numbered 1 and 2 by sitl_multiple_run.sh. -->
+  <group ns="interceptor">
+    <include file="$(find mavros)/launch/px4.launch">
+      <arg name="fcu_url" value="udp://:14541@127.0.0.1:14581" />
+      <arg name="tgt_system" value="2" />
+      <arg name="log_output" value="screen" />
+    </include>
+  </group>
+
+  <group ns="target">
+    <include file="$(find mavros)/launch/px4.launch">
+      <arg name="fcu_url" value="udp://:14542@127.0.0.1:14582" />
+      <arg name="tgt_system" value="3" />
+      <arg name="log_output" value="screen" />
+    </include>
+  </group>
+
+  <node pkg="png_planner"
+        type="fixed_camera_ibvs"
+        name="fixed_camera_ibvs"
+        output="screen"
+        clear_params="true">
+    <rosparam command="load" file="$(find png_planner)/config/fixed_camera_multisim.yaml" />
+  </node>
+
+  <node pkg="png_planner"
+        type="px4_multisim_experiment.py"
+        name="px4_multisim_experiment"
+        output="screen"
+        clear_params="true">
+    <param name="results_dir" value="$(arg results_dir)" />
+    <param name="interceptor_model" value="iris_1" />
+    <param name="target_model" value="iris_2" />
+    <param name="interceptor_altitude_m" value="4.0" />
+    <param name="target_altitude_m" value="9.0" />
+    <param name="target_speed_mps" value="2.0" />
+    <param name="capture_distance_m" value="7.5" />
+    <param name="detection_range_m" value="30.0" />
+    <param name="camera_mount_pitch_deg" value="-20.0" />
+    <param name="fov_horizontal_limit_deg" value="26.6" />
+    <param name="fov_vertical_limit_deg" value="20.6" />
+  </node>
+</launch>
