@@ -1,0 +1,63 @@
+# Radar-driven approach followed by one-way handover to fixed-camera IBVS.
+# No search state is included.
+radar_input_mode: global_gps        # global_gps or local_pose
+radar_global_topic: /target/mavros/global_position/global
+radar_local_topic: /radar/target/position
+self_global_topic: /mavros/global_position/global
+self_pose_topic: /mavros/local_position/pose
+
+# The IBVS controller publishes only a candidate command. This node is the sole
+# publisher to the final MAVROS velocity command topic.
+ibvs_candidate_topic: /fixed_camera_ibvs/cmd_vel_candidate
+final_command_topic: /mavros/setpoint_velocity/cmd_vel
+forward_speed_topic: /fixed_camera_ibvs/forward_speed_setpoint
+
+# Same visual interface as the existing controller; it is used only to verify
+# that the target is steadily centered before command ownership is handed over.
+detection_mode: 0
+detection_topic: /object_kcf
+minimum_detection_score: 0.0
+bbox_center_is_offset: true
+cx: 480.0
+cy: 270.0
+center_tolerance_u_px: 40.0
+center_tolerance_v_px: 40.0
+detection_timeout_sec: 0.30
+required_centered_detections: 5
+
+# Constant-velocity alpha-beta prediction for the nominal 3 s radar update.
+expected_radar_period_sec: 3.0
+radar_timeout_sec: 7.0
+filter_alpha: 0.70
+filter_beta: 0.20
+max_target_speed_mps: 25.0
+max_radar_innovation_m: 80.0
+
+# Terminal pursuit geometry. With a +20 deg optical axis and 20 m slant range,
+# the aircraft is about 18.79 m behind and 6.84 m below the target.
+terminal_camera_range_m: 20.0
+camera_mount_pitch_deg: -20.0
+camera_mount_yaw_deg: 0.0
+camera_offset_body_x_m: 0.0
+camera_offset_body_y_m: 0.0
+camera_offset_body_z_m: 0.0
+minimum_course_speed_mps: 0.5
+
+# Moving-point approach: target velocity feed-forward + terminal-position error.
+position_gain_xy: 0.55
+position_gain_z: 0.45
+yaw_gain: 1.2
+max_approach_speed_mps: 12.0
+max_vertical_speed_mps: 2.0
+max_yaw_rate_radps: 0.8
+
+# Speed passed to the interception controller after handover:
+# target horizontal speed + closing margin, with limits.
+closing_speed_margin_mps: 2.0
+min_handover_forward_speed_mps: 3.0
+max_handover_forward_speed_mps: 12.0
+
+handover_position_tolerance_m: 2.5
+handover_yaw_tolerance_deg: 10.0
+ibvs_candidate_timeout_sec: 0.20
+control_rate_hz: 20.0

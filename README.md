@@ -40,6 +40,31 @@ Configuration is in `src/png_planner/config/fixed_camera_ibvs.yaml`. Design,
 calibration order, and current limitations are documented in
 `docs/fixed_camera_v1.md`.
 
+## Radar approach and visual handover
+
+`radar_approach_handover` adds the approach stage in front of the existing
+fixed-camera interception controller. It estimates constant target velocity
+from the nominal 3 s radar position updates and continuously extrapolates the
+target between updates. The moving terminal point is 20 m from the target on
+the fixed camera optical axis, with aircraft yaw aligned to the estimated
+target course.
+
+The integrated launch uses a single command owner: the visual controller sends
+a candidate command to the approach node; only the approach node publishes the
+final MAVROS command. It switches from radar approach to visual interception
+after the terminal position/yaw tolerances and consecutive centered detections
+are all satisfied.
+
+```bash
+catkin_make
+source devel/setup.bash
+roslaunch png_planner radar_approach_intercept.launch
+```
+
+Configuration and topic details are in
+`src/png_planner/config/radar_approach_handover.yaml` and
+`docs/radar_approach_handover.md`.
+
 基于 ROS1 catkin 的视觉制导工作区，核心目标是根据图像检测框驱动无人机进行偏航跟踪、2D PNG 导引和 3D PNG 导引。
 
 当前工作区主要包含 3 个包：

@@ -307,3 +307,7 @@ target_link_libraries(target_sitl_sim ${catkin_LIBRARIES} ${GEOGRAPHICLIB_LIBRAR
 add_executable(fixed_camera_ibvs src/fixed_camera_ibvs.cpp)
 add_dependencies(fixed_camera_ibvs ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(fixed_camera_ibvs ${catkin_LIBRARIES})
+
+add_executable(radar_approach_handover src/radar_approach_handover.cpp)
+add_dependencies(radar_approach_handover ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(radar_approach_handover ${catkin_LIBRARIES} ${GEOGRAPHICLIB_LIBRARY})

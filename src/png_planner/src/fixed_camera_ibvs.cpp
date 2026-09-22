@@ -6,6 +6,7 @@
 #include <geometry_msgs/Vector3Stamped.h>
 #include <kcf_msgs/Bbox.h>
 #include <sensor_msgs/Imu.h>
+#include <std_msgs/Float64.h>
 #include <tf/tf.h>
 
 #include <algorithm>
@@ -135,6 +136,13 @@ private:
 
         nh.param("V_default", forward_speed_, 5.0);
         nh.param("lost_forward_speed", lost_forward_speed_, forward_speed_);
+        nh.param("enable_forward_speed_topic", enable_forward_speed_topic_, false);
+        nh.param<std::string>("forward_speed_topic", forward_speed_topic_,
+                              "/fixed_camera_ibvs/forward_speed_setpoint");
+        nh.param("min_forward_speed", min_forward_speed_, 1.0);
+        nh.param("max_forward_speed", max_forward_speed_, 12.0);
+        nh.param("forward_speed_smoothing_alpha",
+                 forward_speed_smoothing_alpha_, 0.25);
         nh.param("N_nav", navigation_gain_, 2.0);
         nh.param("max_lateral_velocity", max_lateral_velocity_, 2.0);
         nh.param("k_yaw", yaw_position_gain_, 1.5);
@@ -217,6 +225,10 @@ private:
         fy_ = std::max(fy_, 1.0);
         forward_speed_ = std::max(forward_speed_, 0.0);
         lost_forward_speed_ = std::max(lost_forward_speed_, 0.0);
+        min_forward_speed_ = std::max(min_forward_speed_, 0.0);
+        max_forward_speed_ = std::max(max_forward_speed_, min_forward_speed_);
+        forward_speed_smoothing_alpha_ =
+            clampValue(forward_speed_smoothing_alpha_, 0.0, 1.0);
         max_yaw_rate_ = std::max(max_yaw_rate_, 0.0);
         max_vertical_velocity_ = std::max(max_vertical_velocity_, 0.0);
         max_lateral_velocity_ = std::max(max_lateral_velocity_, 0.0);
@@ -273,6 +285,11 @@ private:
                                      &FixedCameraIbvsController::attitudeCallback, this);
         velocity_sub_ = nh.subscribe(velocity_topic_, 5,
                                      &FixedCameraIbvsController::velocityCallback, this);
+        if (enable_forward_speed_topic_) {
+            forward_speed_sub_ = nh.subscribe(
+                forward_speed_topic_, 1,
+                &FixedCameraIbvsController::forwardSpeedCallback, this);
+        }
         command_pub_ = nh.advertise<geometry_msgs::TwistStamped>(command_topic_, 1);
         los_debug_pub_ = nh.advertise<geometry_msgs::Vector3Stamped>(los_debug_topic_, 1);
         fov_debug_pub_ = nh.advertise<geometry_msgs::Vector3Stamped>(fov_debug_topic_, 1);
@@ -637,6 +654,14 @@ private:
             message->twist.linear.x, message->twist.linear.y);
     }
 
+    void forwardSpeedCallback(const std_msgs::Float64::ConstPtr& message) {
+        if (!std::isfinite(message->data)) return;
+        const double requested = clampValue(
+            message->data, min_forward_speed_, max_forward_speed_);
+        forward_speed_ += forward_speed_smoothing_alpha_ *
+                          (requested - forward_speed_);
+    }
+
     double fx_ = 640.0;
     double fy_ = 640.0;
     double cx_ = 480.0;
@@ -655,6 +680,12 @@ private:
 
     double forward_speed_ = 5.0;
     double lost_forward_speed_ = 5.0;
+    bool enable_forward_speed_topic_ = false;
+    std::string forward_speed_topic_ =
+        "/fixed_camera_ibvs/forward_speed_setpoint";
+    double min_forward_speed_ = 1.0;
+    double max_forward_speed_ = 12.0;
+    double forward_speed_smoothing_alpha_ = 0.25;
     double navigation_gain_ = 2.0;
     double max_lateral_velocity_ = 2.0;
     double yaw_position_gain_ = 1.5;
@@ -728,6 +759,7 @@ private:
     ros::Subscriber pose_sub_;
     ros::Subscriber attitude_sub_;
     ros::Subscriber velocity_sub_;
+    ros::Subscriber forward_speed_sub_;
     ros::Publisher command_pub_;
     ros::Publisher los_debug_pub_;
     ros::Publisher fov_debug_pub_;

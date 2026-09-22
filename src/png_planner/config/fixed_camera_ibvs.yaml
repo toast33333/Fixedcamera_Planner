@@ -27,6 +27,13 @@ velocity_topic: /mavros/local_position/velocity_local
 command_topic: /mavros/setpoint_velocity/cmd_vel
 V_default: 5.0
 lost_forward_speed: 5.0
+# The approach node can provide the target-speed-based forward speed at handover.
+# Disabled in the standalone launch, enabled by radar_approach_intercept.launch.
+enable_forward_speed_topic: false
+forward_speed_topic: /fixed_camera_ibvs/forward_speed_setpoint
+min_forward_speed: 1.0
+max_forward_speed: 12.0
+forward_speed_smoothing_alpha: 0.25
 N_nav: 2.0
 max_lateral_velocity: 2.0
 k_yaw: 1.5

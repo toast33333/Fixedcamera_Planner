@@ -1,0 +1,30 @@
+<launch>
+  <arg name="ibvs_config" default="$(find png_planner)/config/fixed_camera_ibvs.yaml" />
+  <arg name="approach_config" default="$(find png_planner)/config/radar_approach_handover.yaml" />
+  <arg name="detection_mode" default="0" />
+  <arg name="detection_topic" default="/object_kcf" />
+
+  <!-- Existing visual controller: visual inputs are unchanged. Its output is
+       a candidate only, so it cannot conflict with the approach command. -->
+  <node pkg="png_planner"
+        type="fixed_camera_ibvs"
+        name="fixed_camera_ibvs"
+        output="screen">
+    <rosparam command="load" file="$(arg ibvs_config)" />
+    <param name="detection_mode" value="$(arg detection_mode)" />
+    <param name="detection_topic" value="$(arg detection_topic)" />
+    <param name="command_topic" value="/fixed_camera_ibvs/cmd_vel_candidate" />
+    <param name="enable_forward_speed_topic" value="true" />
+  </node>
+
+  <!-- Sole owner of /mavros/setpoint_velocity/cmd_vel. Before handover it
+       generates radar approach commands; afterwards it forwards IBVS. -->
+  <node pkg="png_planner"
+        type="radar_approach_handover"
+        name="radar_approach_handover"
+        output="screen">
+    <rosparam command="load" file="$(arg approach_config)" />
+    <param name="detection_mode" value="$(arg detection_mode)" />
+    <param name="detection_topic" value="$(arg detection_topic)" />
+  </node>
+</launch>
