@@ -1,0 +1,11 @@
+case_name,target_spawn_x,target_spawn_y,target_altitude_m,target_speed_mps,target_heading_deg,target_turn_rate_degps,target_climb_rate_mps,radar_period_sec,radar_timeout_sec,radar_noise_std_m,radar_dropout_start_sec,radar_dropout_duration_sec,radar_acquire_duration_sec,chase_timeout_s,expected_result
+nominal_tail,70,0,9,2,0,0,0,3,7,0,-1,0,6.5,45,SUCCESS
+oblique_45deg,65,-20,9,4,45,0,0,3,7,0,-1,0,6.5,45,SUCCESS
+crossing_90deg,55,-25,9,4,90,0,0,3,7,0,-1,0,6.5,50,SUCCESS
+moderate_climb,65,0,12,5,0,0,0.8,3,7,0.5,-1,0,6.5,50,SUCCESS
+radar_noise_3m,65,10,9,4,20,0,0,3,7,3,-1,0,6.5,50,BOUNDARY
+radar_period_5s,65,0,9,5,0,0,0,5,12,0.5,-1,0,10.5,55,BOUNDARY
+radar_dropout_12s,65,0,9,5,0,0,0,3,7,0,12,12,6.5,55,BOUNDARY
+too_fast_13mps,60,0,9,13,0,0,0,3,7,0,-1,0,6.5,40,FAILURE
+rapid_climb_3mps,60,0,9,4,0,0,3,3,7,0,-1,0,6.5,45,FAILURE
+hard_turn_20degps,60,0,9,6,0,20,0,3,7,0.5,-1,0,6.5,50,BOUNDARY

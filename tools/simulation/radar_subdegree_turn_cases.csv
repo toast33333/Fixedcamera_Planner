@@ -1,0 +1,4 @@
+case_name,target_spawn_x,target_spawn_y,target_altitude_m,target_speed_mps,target_heading_deg,target_turn_rate_degps,target_climb_rate_mps,radar_period_sec,radar_timeout_sec,radar_noise_std_m,radar_dropout_start_sec,radar_dropout_duration_sec,radar_acquire_duration_sec,chase_timeout_s,expected_result
+turn_0p25degps,60,0,9,6,0,0.25,0,3,7,0.5,-1,0,6.5,40,BOUNDARY
+turn_0p50degps,60,0,9,6,0,0.50,0,3,7,0.5,-1,0,6.5,40,BOUNDARY
+turn_0p75degps,60,0,9,6,0,0.75,0,3,7,0.5,-1,0,6.5,40,BOUNDARY

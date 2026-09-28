@@ -41,6 +41,13 @@ def angular_ratio(angle_deg, half_angle_limit_deg):
     return abs(angle_deg) / half_angle_limit_deg
 
 
+def ramp_forward_speed(active, target, acceleration_limit, dt):
+    target = max(target, 0.0)
+    if acceleration_limit <= 0.0 or target <= active:
+        return target
+    return min(target, active + acceleration_limit * max(dt, 0.0))
+
+
 class FixedCameraMathTest(unittest.TestCase):
     def test_optical_center_maps_to_body_forward(self):
         self.assertEqual(camera_to_body((0.0, 0.0, 1.0)), (1.0, 0.0, 0.0))
@@ -87,6 +94,16 @@ class FixedCameraMathTest(unittest.TestCase):
         self.assertAlmostEqual(angular_ratio(-26.6, 26.6), 1.0)
         self.assertAlmostEqual(angular_ratio(20.6, 20.6), 1.0)
         self.assertAlmostEqual(angular_ratio(-20.6, 20.6), 1.0)
+
+    def test_forward_speed_ramp_limits_positive_acceleration(self):
+        speed = 0.0
+        for _ in range(50):
+            speed = ramp_forward_speed(speed, 8.0, 1.0, 0.02)
+        self.assertAlmostEqual(speed, 1.0, places=12)
+
+    def test_forward_speed_ramp_keeps_fov_deceleration_immediate(self):
+        self.assertEqual(ramp_forward_speed(8.0, 3.5, 1.0, 0.02), 3.5)
+        self.assertEqual(ramp_forward_speed(2.0, 8.0, 0.0, 0.02), 8.0)
 
 
 if __name__ == "__main__":

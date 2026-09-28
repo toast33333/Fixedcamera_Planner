@@ -322,12 +322,18 @@ private:
     template <typename MessageT>
     void updateDetection(const MessageT& message) {
         const ros::Time now = ros::Time::now();
+        const bool detection_stream_continuous = detection_time_.isZero() ||
+            (now - detection_time_).toSec() <= detection_timeout_sec_;
         detection_time_ = now;
         detection_valid_ =
             message.is_tracking && message.score >= minimum_detection_score_;
         if (!detection_valid_) {
             centered_detection_count_ = 0;
             return;
+        }
+
+        if (!detection_stream_continuous) {
+            centered_detection_count_ = 0;
         }
 
         const double raw_u = 0.5 * (message.x1 + message.x2);
@@ -494,31 +500,38 @@ private:
 
     void controlTimer(const ros::TimerEvent&) {
         const ros::Time now = ros::Time::now();
-        if (!have_self_pose_ || !have_radar_filter_ || radar_sample_count_ < 2) {
+        if (!have_self_pose_) {
             setState(State::WAIT_RADAR);
             publishHandoverFlag(false);
             final_command_pub_.publish(zeroCommand(now));
             return;
         }
 
-        if ((now - radar_last_received_).toSec() > radar_timeout_sec_) {
-            setState(State::RADAR_TIMEOUT);
-            publishHandoverFlag(false);
-            final_command_pub_.publish(zeroCommand(now));
-            return;
-        }
-
-        const geometry_msgs::Point target_now = predictedTargetAt(now);
-        double desired_body_yaw = 0.0;
-        const geometry_msgs::PoseStamped handover_pose =
-            computeHandoverPose(target_now, now, desired_body_yaw);
-        publishDiagnostics(target_now, handover_pose, now);
-
-        std_msgs::Float64 forward_speed;
-        forward_speed.data = recommendedForwardSpeed();
-        forward_speed_pub_.publish(forward_speed);
-
         if (!handover_complete_) {
+            if (!have_radar_filter_ || radar_sample_count_ < 2) {
+                setState(State::WAIT_RADAR);
+                publishHandoverFlag(false);
+                final_command_pub_.publish(zeroCommand(now));
+                return;
+            }
+
+            if ((now - radar_last_received_).toSec() > radar_timeout_sec_) {
+                setState(State::RADAR_TIMEOUT);
+                publishHandoverFlag(false);
+                final_command_pub_.publish(zeroCommand(now));
+                return;
+            }
+
+            const geometry_msgs::Point target_now = predictedTargetAt(now);
+            double desired_body_yaw = 0.0;
+            const geometry_msgs::PoseStamped handover_pose =
+                computeHandoverPose(target_now, now, desired_body_yaw);
+            publishDiagnostics(target_now, handover_pose, now);
+
+            std_msgs::Float64 forward_speed;
+            forward_speed.data = recommendedForwardSpeed();
+            forward_speed_pub_.publish(forward_speed);
+
             setState(State::APPROACH);
             const double position_error = pointDistance(
                 self_pose_.pose.position, handover_pose.pose.position);

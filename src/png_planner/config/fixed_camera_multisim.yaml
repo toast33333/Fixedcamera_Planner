@@ -23,25 +23,28 @@ velocity_topic: /interceptor/mavros/local_position/velocity_local
 command_topic: /fixed_camera_sim/ibvs_cmd
 V_default: 4.5
 lost_forward_speed: 0.0
+# Tuned for direct visual interception: suppress the acquisition pitch
+# transient without changing the steady 8 m/s PN closing command.
+forward_speed_accel_limit_mps2: 1.5
 N_nav: 2.0
 max_lateral_velocity: 2.0
 k_yaw: 1.5
 k_yaw_d: 0.3
 max_yaw_rate: 1.0
-yaw_enable_speed_ratio: 0.4
+yaw_enable_speed_ratio: 0.1
 
 enable_height_control: true
 k_z_ff: 1.0
 N_nav_z: 2.0
-max_vz: 1.0
+max_vz: 1.6
 vertical_integrator_decay: 0.98
 
-fov_horizontal_limit_deg: 26.6
-fov_vertical_limit_deg: 20.6
+fov_horizontal_limit_deg: 23.94
+fov_vertical_limit_deg: 18.54
 fov_barrier_gain: 0.20
-fov_barrier_max: 4.0
-fov_slowdown_start_ratio: 0.65
-fov_min_forward_speed_ratio: 0.25
+fov_barrier_max: 3.0
+fov_slowdown_start_ratio: 0.99
+fov_min_forward_speed_ratio: 1.0
 fov_emergency_yaw_ratio: 0.85
 
 enable_attitude_compensation: true
@@ -64,3 +67,5 @@ gamma_kalman_r: 0.0002
 
 los_debug_topic: /fixed_camera_ibvs/los_world
 fov_debug_topic: /fixed_camera_ibvs/fov_state
+nominal_command_debug_topic: /fixed_camera_ibvs/nominal_pn_cmd
+fov_correction_debug_topic: /fixed_camera_ibvs/fov_correction

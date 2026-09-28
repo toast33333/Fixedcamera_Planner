@@ -1,0 +1,9 @@
+case_name,target_spawn_x,target_spawn_y,target_altitude_m,target_speed_mps,target_heading_deg,target_turn_rate_degps,target_climb_rate_mps,radar_period_sec,radar_timeout_sec,radar_noise_std_m,radar_dropout_start_sec,radar_dropout_duration_sec,radar_acquire_duration_sec,chase_timeout_s,expected_result,fov_barrier_gain,fov_barrier_max,fov_slowdown_start_ratio,fov_min_forward_speed_ratio,fov_emergency_yaw_ratio,k_z_ff,n_nav_z,max_vz,k_yaw,k_yaw_d,max_yaw_rate
+pure_pn_vz1p0,70,0,9,5,0,0,0.6,3,7,0.5,-1,0,6.5,45,tune,0.0,1.0,0.99,1.0,1.0,1.0,2.0,1.0,1.5,0.3,1.0
+baseline_vz1p0,70,0,9,5,0,0,0.6,3,7,0.5,-1,0,6.5,45,tune,0.2,4.0,0.65,0.25,0.85,1.0,2.0,1.0,1.5,0.3,1.0
+baseline_vz1p2,70,0,9,5,0,0,0.6,3,7,0.5,-1,0,6.5,45,tune,0.2,4.0,0.65,0.25,0.85,1.0,2.0,1.2,1.5,0.3,1.0
+baseline_vz1p4,70,0,9,5,0,0,0.6,3,7,0.5,-1,0,6.5,45,tune,0.2,4.0,0.65,0.25,0.85,1.0,2.0,1.4,1.5,0.3,1.0
+gentle_barrier_vz1p2,70,0,9,5,0,0,0.6,3,7,0.5,-1,0,6.5,45,tune,0.1,3.0,0.75,0.5,0.9,1.0,2.0,1.2,1.5,0.3,1.0
+strong_barrier_vz1p2,70,0,9,5,0,0,0.6,3,7,0.5,-1,0,6.5,45,tune,0.35,4.0,0.6,0.25,0.8,1.0,2.0,1.2,1.5,0.3,1.0
+kz1p5_vz1p2,70,0,9,5,0,0,0.6,3,7,0.5,-1,0,6.5,45,tune,0.2,4.0,0.65,0.25,0.85,1.5,2.0,1.2,1.5,0.3,1.0
+nz3_vz1p2,70,0,9,5,0,0,0.6,3,7,0.5,-1,0,6.5,45,tune,0.2,4.0,0.65,0.25,0.85,1.0,3.0,1.2,1.5,0.3,1.0

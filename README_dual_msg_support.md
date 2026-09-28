@@ -361,14 +361,14 @@ double lambda_dot = lambda_filter_.rate();
 - `src/png_planner/src/rpy_los_no_alt.cpp`
 - `src/png_planner/src/rpy_png.cpp`
 - `src/png_planner/src/rpy_png_no_alt.cpp`
-- `src/png_planner/src/FSM.cpp`
+- `src/png_planner/src/radar_approach_handover.cpp`
 - `src/png_planner/src/target_sitl_sim.cpp`
 
 当前定位是：
 
 - `rpy_pid_ff_ctrl.cpp` / `rpy_search_scan.cpp` 负责云台角度链路
 - `rpy_los*` / `rpy_png*` 负责基于云台角度的机体控制
-- `FSM.cpp` / `target_sitl_sim.cpp` 负责任务调度或联调辅助
+- `radar_approach_handover.cpp` 负责雷达抵近与视觉交接，`target_sitl_sim.cpp` 负责联调辅助
 
 补充：
 

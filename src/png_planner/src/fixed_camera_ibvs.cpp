@@ -143,6 +143,8 @@ private:
         nh.param("max_forward_speed", max_forward_speed_, 12.0);
         nh.param("forward_speed_smoothing_alpha",
                  forward_speed_smoothing_alpha_, 0.25);
+        nh.param("forward_speed_accel_limit_mps2",
+                 forward_speed_accel_limit_mps2_, 0.0);
         nh.param("N_nav", navigation_gain_, 2.0);
         nh.param("max_lateral_velocity", max_lateral_velocity_, 2.0);
         nh.param("k_yaw", yaw_position_gain_, 1.5);
@@ -153,7 +155,7 @@ private:
         nh.param("enable_height_control", enable_height_control_, true);
         nh.param("k_z_ff", vertical_position_gain_, 1.0);
         nh.param("N_nav_z", vertical_navigation_gain_, 2.0);
-        nh.param("max_vz", max_vertical_velocity_, 1.0);
+        nh.param("max_vz", max_vertical_velocity_, 1.4);
         nh.param("vertical_integrator_decay", vertical_integrator_decay_, 0.98);
 
         // The paper defines horizontal and vertical FOV constraints as half angles.
@@ -163,15 +165,15 @@ private:
         double legacy_margin_ratio = 1.0;
         nh.param("hfov_deg", legacy_hfov_deg, 53.2);
         nh.param("vfov_deg", legacy_vfov_deg, 41.2);
-        nh.param("fov_margin_ratio", legacy_margin_ratio, 1.0);
+        nh.param("fov_margin_ratio", legacy_margin_ratio, 0.9);
         nh.param("fov_horizontal_limit_deg", fov_horizontal_limit_deg_,
                  0.5 * legacy_hfov_deg * legacy_margin_ratio);
         nh.param("fov_vertical_limit_deg", fov_vertical_limit_deg_,
                  0.5 * legacy_vfov_deg * legacy_margin_ratio);
         nh.param("fov_barrier_gain", fov_barrier_gain_, 0.20);
-        nh.param("fov_barrier_max", fov_barrier_max_, 4.0);
-        nh.param("fov_slowdown_start_ratio", fov_slowdown_start_ratio_, 0.65);
-        nh.param("fov_min_forward_speed_ratio", fov_min_forward_speed_ratio_, 0.25);
+        nh.param("fov_barrier_max", fov_barrier_max_, 3.0);
+        nh.param("fov_slowdown_start_ratio", fov_slowdown_start_ratio_, 0.99);
+        nh.param("fov_min_forward_speed_ratio", fov_min_forward_speed_ratio_, 1.0);
         nh.param("fov_emergency_yaw_ratio", fov_emergency_yaw_ratio_, 0.85);
 
         nh.param("pixel_thr", pixel_threshold_x_, 5.0);
@@ -220,6 +222,12 @@ private:
                               "/fixed_camera_ibvs/los_world");
         nh.param<std::string>("fov_debug_topic", fov_debug_topic_,
                               "/fixed_camera_ibvs/fov_state");
+        nh.param<std::string>("nominal_command_debug_topic",
+                              nominal_command_debug_topic_,
+                              "/fixed_camera_ibvs/nominal_pn_cmd");
+        nh.param<std::string>("fov_correction_debug_topic",
+                              fov_correction_debug_topic_,
+                              "/fixed_camera_ibvs/fov_correction");
 
         fx_ = std::max(fx_, 1.0);
         fy_ = std::max(fy_, 1.0);
@@ -229,6 +237,8 @@ private:
         max_forward_speed_ = std::max(max_forward_speed_, min_forward_speed_);
         forward_speed_smoothing_alpha_ =
             clampValue(forward_speed_smoothing_alpha_, 0.0, 1.0);
+        forward_speed_accel_limit_mps2_ =
+            std::max(forward_speed_accel_limit_mps2_, 0.0);
         max_yaw_rate_ = std::max(max_yaw_rate_, 0.0);
         max_vertical_velocity_ = std::max(max_vertical_velocity_, 0.0);
         max_lateral_velocity_ = std::max(max_lateral_velocity_, 0.0);
@@ -293,6 +303,10 @@ private:
         command_pub_ = nh.advertise<geometry_msgs::TwistStamped>(command_topic_, 1);
         los_debug_pub_ = nh.advertise<geometry_msgs::Vector3Stamped>(los_debug_topic_, 1);
         fov_debug_pub_ = nh.advertise<geometry_msgs::Vector3Stamped>(fov_debug_topic_, 1);
+        nominal_command_debug_pub_ =
+            nh.advertise<geometry_msgs::TwistStamped>(nominal_command_debug_topic_, 1);
+        fov_correction_debug_pub_ =
+            nh.advertise<geometry_msgs::TwistStamped>(fov_correction_debug_topic_, 1);
     }
 
     tf::Vector3 cameraRayToBody(const tf::Vector3& camera_ray) const {
@@ -423,6 +437,27 @@ private:
         return 1.0 - progress * (1.0 - fov_min_forward_speed_ratio_);
     }
 
+    double rampForwardSpeed(double target_speed,
+                            double& active_speed,
+                            double dt) const {
+        target_speed = std::max(target_speed, 0.0);
+        if (forward_speed_accel_limit_mps2_ <= 0.0) {
+            active_speed = target_speed;
+            return active_speed;
+        }
+
+        // Keep FOV-driven deceleration immediate.  Limit only positive
+        // acceleration so acquisition cannot command a large pitch step.
+        if (target_speed <= active_speed) {
+            active_speed = target_speed;
+            return active_speed;
+        }
+        active_speed = std::min(
+            target_speed,
+            active_speed + forward_speed_accel_limit_mps2_ * std::max(dt, 0.0));
+        return active_speed;
+    }
+
     void publishTrackingCommand(const ros::Time& now, double dt) {
         const tf::Vector3 los_world = predictedWorldLos(now);
         const tf::Matrix3x3 world_from_body(
@@ -476,6 +511,7 @@ private:
         updateYawEnableState();
         const bool fov_emergency = fov_ratio >= fov_emergency_yaw_ratio_;
         double yaw_rate_command = 0.0;
+        double nominal_yaw_rate_command = 0.0;
         if (yaw_control_enabled_ || fov_emergency) {
             const double position_term =
                 std::fabs(predicted_u - desired_u_offset_px_) > pixel_threshold_x_
@@ -485,36 +521,81 @@ private:
                 position_term + yaw_rate_gain_ * azimuth_filter_.rate(),
                 -max_yaw_rate_, max_yaw_rate_);
         }
+        if (yaw_control_enabled_) {
+            const double nominal_position_term =
+                std::fabs(predicted_u - desired_u_offset_px_) > pixel_threshold_x_
+                    ? yaw_position_gain_ * yaw_error
+                    : 0.0;
+            nominal_yaw_rate_command = clampValue(
+                nominal_position_term + yaw_rate_gain_ * azimuth_filter_.rate(),
+                -max_yaw_rate_, max_yaw_rate_);
+        }
 
-        const double commanded_forward_speed = forward_speed_ * speed_scale;
+        if (!forward_speed_ramp_initialized_) {
+            const double initial_speed = clampValue(
+                current_horizontal_speed_, 0.0, forward_speed_);
+            active_forward_speed_ = initial_speed;
+            nominal_forward_speed_ = initial_speed;
+            forward_speed_ramp_initialized_ = true;
+        }
+        const double nominal_commanded_forward_speed = rampForwardSpeed(
+            forward_speed_, nominal_forward_speed_, dt);
+        const double commanded_forward_speed = rampForwardSpeed(
+            forward_speed_ * speed_scale, active_forward_speed_, dt);
         const double lateral_acceleration =
             navigation_gain_ * commanded_forward_speed * azimuth_filter_.rate();
         const double lateral_velocity = clampValue(
             lateral_acceleration * dt,
             -max_lateral_velocity_, max_lateral_velocity_);
+        const double nominal_lateral_acceleration =
+            navigation_gain_ * nominal_commanded_forward_speed * azimuth_filter_.rate();
+        const double nominal_lateral_velocity = clampValue(
+            nominal_lateral_acceleration * dt,
+            -max_lateral_velocity_, max_lateral_velocity_);
 
         double vertical_velocity = 0.0;
+        double nominal_vertical_velocity = 0.0;
         if (enable_height_control_) {
             if (std::fabs(predicted_input_v - desired_v_offset_px_) > pixel_threshold_y_) {
                 const double vertical_acceleration =
                     vertical_navigation_gain_ * commanded_forward_speed *
                     elevation_filter_.rate();
                 vertical_velocity_integral_ += vertical_acceleration * dt;
+                const double nominal_vertical_acceleration =
+                    vertical_navigation_gain_ * nominal_commanded_forward_speed *
+                    elevation_filter_.rate();
+                nominal_vertical_velocity_integral_ +=
+                    nominal_vertical_acceleration * dt;
             } else {
                 vertical_velocity_integral_ *= vertical_integrator_decay_;
+                nominal_vertical_velocity_integral_ *= vertical_integrator_decay_;
             }
             vertical_velocity_integral_ = clampValue(
                 vertical_velocity_integral_,
                 -max_vertical_velocity_, max_vertical_velocity_);
+            nominal_vertical_velocity_integral_ = clampValue(
+                nominal_vertical_velocity_integral_,
+                -max_vertical_velocity_, max_vertical_velocity_);
             vertical_velocity = clampValue(
                 vertical_position_gain_ * vertical_barrier_scale * elevation_error +
                     vertical_velocity_integral_,
+                -max_vertical_velocity_, max_vertical_velocity_);
+            nominal_vertical_velocity = clampValue(
+                vertical_position_gain_ * elevation_error +
+                    nominal_vertical_velocity_integral_,
                 -max_vertical_velocity_, max_vertical_velocity_);
         }
 
         publishBodyVelocity(now, commanded_forward_speed,
                             lateral_velocity, vertical_velocity,
                             yaw_rate_command);
+        publishCommandComparison(
+            now,
+            commanded_forward_speed, lateral_velocity, vertical_velocity,
+            yaw_rate_command,
+            nominal_commanded_forward_speed,
+            nominal_lateral_velocity, nominal_vertical_velocity,
+            nominal_yaw_rate_command);
         publishDebug(now, los_world, horizontal_ratio, vertical_ratio, barrier_scale);
 
         if (fov_ratio >= 1.0) {
@@ -526,14 +607,21 @@ private:
     }
 
     void publishLostTargetCommand(const ros::Time& now) {
+        forward_speed_ramp_initialized_ = false;
+        active_forward_speed_ = lost_forward_speed_;
+        nominal_forward_speed_ = lost_forward_speed_;
         publishBodyVelocity(now, lost_forward_speed_, 0.0, 0.0, 0.0);
+        publishCommandComparison(now,
+                                 lost_forward_speed_, 0.0, 0.0, 0.0,
+                                 lost_forward_speed_, 0.0, 0.0, 0.0);
     }
 
-    void publishBodyVelocity(const ros::Time& stamp,
-                             double forward,
-                             double left,
-                             double up,
-                             double yaw_rate) {
+    geometry_msgs::TwistStamped makeBodyVelocityCommand(
+        const ros::Time& stamp,
+        double forward,
+        double left,
+        double up,
+        double yaw_rate) const {
         tf::Matrix3x3 attitude_matrix(current_attitude_);
         double roll = 0.0;
         double pitch = 0.0;
@@ -546,7 +634,44 @@ private:
         command.twist.linear.y = forward * std::sin(yaw) + left * std::cos(yaw);
         command.twist.linear.z = up;
         command.twist.angular.z = yaw_rate;
-        command_pub_.publish(command);
+        return command;
+    }
+
+    void publishBodyVelocity(const ros::Time& stamp,
+                             double forward,
+                             double left,
+                             double up,
+                             double yaw_rate) {
+        command_pub_.publish(makeBodyVelocityCommand(
+            stamp, forward, left, up, yaw_rate));
+    }
+
+    void publishCommandComparison(
+        const ros::Time& stamp,
+        double actual_forward,
+        double actual_left,
+        double actual_up,
+        double actual_yaw_rate,
+        double nominal_forward,
+        double nominal_left,
+        double nominal_up,
+        double nominal_yaw_rate) {
+        const geometry_msgs::TwistStamped actual = makeBodyVelocityCommand(
+            stamp, actual_forward, actual_left, actual_up, actual_yaw_rate);
+        const geometry_msgs::TwistStamped nominal = makeBodyVelocityCommand(
+            stamp, nominal_forward, nominal_left, nominal_up, nominal_yaw_rate);
+        geometry_msgs::TwistStamped correction;
+        correction.header.stamp = stamp;
+        correction.twist.linear.x =
+            actual.twist.linear.x - nominal.twist.linear.x;
+        correction.twist.linear.y =
+            actual.twist.linear.y - nominal.twist.linear.y;
+        correction.twist.linear.z =
+            actual.twist.linear.z - nominal.twist.linear.z;
+        correction.twist.angular.z =
+            actual.twist.angular.z - nominal.twist.angular.z;
+        nominal_command_debug_pub_.publish(nominal);
+        fov_correction_debug_pub_.publish(correction);
     }
 
     void publishDebug(const ros::Time& stamp,
@@ -578,6 +703,7 @@ private:
         filters_initialized_ = false;
         have_world_los_ = false;
         vertical_velocity_integral_ = 0.0;
+        nominal_vertical_velocity_integral_ = 0.0;
     }
 
     void updateYawEnableState() {
@@ -686,6 +812,10 @@ private:
     double min_forward_speed_ = 1.0;
     double max_forward_speed_ = 12.0;
     double forward_speed_smoothing_alpha_ = 0.25;
+    double forward_speed_accel_limit_mps2_ = 0.0;
+    double active_forward_speed_ = 0.0;
+    double nominal_forward_speed_ = 0.0;
+    bool forward_speed_ramp_initialized_ = false;
     double navigation_gain_ = 2.0;
     double max_lateral_velocity_ = 2.0;
     double yaw_position_gain_ = 1.5;
@@ -700,13 +830,14 @@ private:
     double max_vertical_velocity_ = 1.0;
     double vertical_integrator_decay_ = 0.98;
     double vertical_velocity_integral_ = 0.0;
+    double nominal_vertical_velocity_integral_ = 0.0;
 
-    double fov_horizontal_limit_deg_ = 26.6;
-    double fov_vertical_limit_deg_ = 20.6;
+    double fov_horizontal_limit_deg_ = 23.94;
+    double fov_vertical_limit_deg_ = 18.54;
     double fov_barrier_gain_ = 0.20;
-    double fov_barrier_max_ = 4.0;
-    double fov_slowdown_start_ratio_ = 0.65;
-    double fov_min_forward_speed_ratio_ = 0.25;
+    double fov_barrier_max_ = 3.0;
+    double fov_slowdown_start_ratio_ = 0.99;
+    double fov_min_forward_speed_ratio_ = 1.0;
     double fov_emergency_yaw_ratio_ = 0.85;
 
     double pixel_threshold_x_ = 5.0;
@@ -740,6 +871,8 @@ private:
     std::string command_topic_;
     std::string los_debug_topic_;
     std::string fov_debug_topic_;
+    std::string nominal_command_debug_topic_;
+    std::string fov_correction_debug_topic_;
 
     DetectionData last_detection_;
     ros::Time last_detection_time_;
@@ -763,6 +896,8 @@ private:
     ros::Publisher command_pub_;
     ros::Publisher los_debug_pub_;
     ros::Publisher fov_debug_pub_;
+    ros::Publisher nominal_command_debug_pub_;
+    ros::Publisher fov_correction_debug_pub_;
 };
 
 int main(int argc, char** argv) {

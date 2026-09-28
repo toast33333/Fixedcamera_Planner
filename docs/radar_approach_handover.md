@@ -59,13 +59,16 @@ Handover is latched only when all conditions are true:
 - aircraft is within the configured terminal-position tolerance;
 - yaw error is within the configured tolerance;
 - the existing detector reports the target near image center for the required
-  consecutive detections.
+  consecutive detections. An invalid frame, an off-center frame, or a gap
+  longer than the detection timeout resets the consecutive count.
 
 `fixed_camera_ibvs` publishes to
 `/fixed_camera_ibvs/cmd_vel_candidate` in the integrated launch. The approach
 node is the only publisher to `/mavros/setpoint_velocity/cmd_vel`: it publishes
 the radar approach command before handover and forwards the IBVS candidate
-after handover. Therefore PX4 never receives two competing command streams.
+after handover. Radar freshness is no longer used to gate control after this
+one-way handover; only IBVS candidate freshness is checked. Therefore PX4
+never receives two competing command streams.
 
 ## Diagnostics
 

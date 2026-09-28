@@ -246,6 +246,10 @@ catkin_install_python(PROGRAMS
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
+install(FILES scripts/gauss_markov_disturbance.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
 add_executable(rp_png src/rp_png.cpp)
 add_dependencies(rp_png ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(rp_png ${catkin_LIBRARIES})
@@ -295,10 +299,6 @@ target_link_libraries(rpy_png ${catkin_LIBRARIES})
 add_executable(rpy_png_no_alt src/rpy_png_no_alt.cpp)
 add_dependencies(rpy_png_no_alt ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(rpy_png_no_alt ${catkin_LIBRARIES})
-
-add_executable(FSM src/FSM.cpp)
-add_dependencies(FSM ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(FSM ${catkin_LIBRARIES} ${GEOGRAPHICLIB_LIBRARY})
 
 add_executable(target_sitl_sim src/target_sitl_sim.cpp)
 add_dependencies(target_sitl_sim ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})

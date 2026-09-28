@@ -1,0 +1,123 @@
+<launch>
+  <arg name="results_dir" default="/tmp/fov_tuning_visual_multisim" />
+  <arg name="target_speed_mps" default="6.0" />
+  <arg name="target_heading_deg" default="0.0" />
+  <arg name="target_turn_rate_degps" default="0.5" />
+  <arg name="target_climb_rate_mps" default="0.0" />
+  <arg name="interceptor_altitude_m" default="4.0" />
+  <arg name="target_altitude_m" default="9.0" />
+  <arg name="capture_distance_m" default="5.0" />
+  <arg name="chase_timeout_s" default="60.0" />
+  <arg name="radar_period_sec" default="3.0" />
+  <arg name="radar_timeout_sec" default="7.0" />
+  <arg name="radar_noise_std_m" default="0.0" />
+  <arg name="radar_dropout_start_sec" default="-1.0" />
+  <arg name="radar_dropout_duration_sec" default="0.0" />
+  <arg name="radar_acquire_duration_sec" default="0.0" />
+  <arg name="radar_seed" default="1" />
+  <arg name="disturbance_model" default="none" />
+  <arg name="disturbance_seed" default="20260926" />
+  <arg name="disturbance_time_constant_s" default="2.0" />
+  <arg name="disturbance_clip_sigma" default="3.0" />
+  <arg name="interceptor_disturbance_std_xy_mps" default="0.0" />
+  <arg name="interceptor_disturbance_std_z_mps" default="0.0" />
+  <arg name="target_disturbance_std_xy_mps" default="0.0" />
+  <arg name="target_disturbance_std_z_mps" default="0.0" />
+  <arg name="visual_disturbance_std_px" default="0.0" />
+  <arg name="detection_range_m" default="120.0" />
+  <arg name="fov_barrier_gain" default="0.20" />
+  <arg name="fov_barrier_max" default="3.0" />
+  <arg name="fov_slowdown_start_ratio" default="0.99" />
+  <arg name="fov_min_forward_speed_ratio" default="1.0" />
+  <arg name="fov_emergency_yaw_ratio" default="0.85" />
+  <arg name="k_z_ff" default="1.0" />
+  <arg name="N_nav_z" default="2.0" />
+  <arg name="max_vz" default="1.6" />
+  <arg name="k_yaw" default="1.5" />
+  <arg name="k_yaw_d" default="0.3" />
+  <arg name="max_yaw_rate" default="1.0" />
+  <arg name="yaw_enable_speed_ratio" default="0.1" />
+  <arg name="controller_fov_horizontal_limit_deg" default="23.94" />
+  <arg name="controller_fov_vertical_limit_deg" default="18.54" />
+  <arg name="visual_forward_speed_mps" default="8.0" />
+  <arg name="forward_speed_accel_limit_mps2" default="1.5" />
+  <arg name="gate_detection_until_chase" default="true" />
+
+  <group ns="interceptor">
+    <include file="$(find mavros)/launch/px4.launch">
+      <arg name="fcu_url" value="udp://:14541@127.0.0.1:14581" />
+      <arg name="tgt_system" value="2" />
+      <arg name="log_output" value="screen" />
+    </include>
+  </group>
+
+  <group ns="target">
+    <include file="$(find mavros)/launch/px4.launch">
+      <arg name="fcu_url" value="udp://:14542@127.0.0.1:14582" />
+      <arg name="tgt_system" value="3" />
+      <arg name="log_output" value="screen" />
+    </include>
+  </group>
+
+  <node pkg="png_planner"
+        type="fixed_camera_ibvs"
+        name="fixed_camera_ibvs"
+        output="screen"
+        clear_params="true">
+    <rosparam command="load" file="$(find png_planner)/config/fixed_camera_multisim.yaml" />
+    <param name="command_topic" value="/fixed_camera_sim/ibvs_candidate" />
+    <param name="enable_forward_speed_topic" value="false" />
+    <param name="lost_forward_speed" value="0.0" />
+    <param name="V_default" value="$(arg visual_forward_speed_mps)" />
+    <param name="forward_speed_accel_limit_mps2" value="$(arg forward_speed_accel_limit_mps2)" />
+    <param name="fov_barrier_gain" value="$(arg fov_barrier_gain)" />
+    <param name="fov_barrier_max" value="$(arg fov_barrier_max)" />
+    <param name="fov_slowdown_start_ratio" value="$(arg fov_slowdown_start_ratio)" />
+    <param name="fov_min_forward_speed_ratio" value="$(arg fov_min_forward_speed_ratio)" />
+    <param name="fov_emergency_yaw_ratio" value="$(arg fov_emergency_yaw_ratio)" />
+    <param name="k_z_ff" value="$(arg k_z_ff)" />
+    <param name="N_nav_z" value="$(arg N_nav_z)" />
+    <param name="max_vz" value="$(arg max_vz)" />
+    <param name="k_yaw" value="$(arg k_yaw)" />
+    <param name="k_yaw_d" value="$(arg k_yaw_d)" />
+    <param name="max_yaw_rate" value="$(arg max_yaw_rate)" />
+    <param name="yaw_enable_speed_ratio" value="$(arg yaw_enable_speed_ratio)" />
+    <param name="fov_horizontal_limit_deg" value="$(arg controller_fov_horizontal_limit_deg)" />
+    <param name="fov_vertical_limit_deg" value="$(arg controller_fov_vertical_limit_deg)" />
+  </node>
+
+  <node pkg="png_planner"
+        type="px4_multisim_experiment.py"
+        name="px4_fov_tuning_experiment"
+        output="screen"
+        required="true"
+        clear_params="true">
+    <param name="results_dir" value="$(arg results_dir)" />
+    <param name="interceptor_model" value="iris_1" />
+    <param name="target_model" value="iris_2" />
+    <param name="radar_guidance_enabled" value="false" />
+    <param name="guidance_command_topic" value="/fixed_camera_sim/ibvs_candidate" />
+    <param name="interceptor_altitude_m" value="$(arg interceptor_altitude_m)" />
+    <param name="target_altitude_m" value="$(arg target_altitude_m)" />
+    <param name="target_speed_mps" value="$(arg target_speed_mps)" />
+    <param name="target_heading_deg" value="$(arg target_heading_deg)" />
+    <param name="target_turn_rate_degps" value="$(arg target_turn_rate_degps)" />
+    <param name="target_climb_rate_mps" value="$(arg target_climb_rate_mps)" />
+    <param name="capture_distance_m" value="$(arg capture_distance_m)" />
+    <param name="chase_timeout_s" value="$(arg chase_timeout_s)" />
+    <param name="detection_range_m" value="$(arg detection_range_m)" />
+    <param name="camera_mount_pitch_deg" value="-20.0" />
+    <param name="fov_horizontal_limit_deg" value="26.6" />
+    <param name="fov_vertical_limit_deg" value="20.6" />
+    <param name="gate_detection_until_chase" value="$(arg gate_detection_until_chase)" />
+    <param name="disturbance_model" value="$(arg disturbance_model)" />
+    <param name="disturbance_seed" value="$(arg disturbance_seed)" />
+    <param name="disturbance_time_constant_s" value="$(arg disturbance_time_constant_s)" />
+    <param name="disturbance_clip_sigma" value="$(arg disturbance_clip_sigma)" />
+    <param name="interceptor_disturbance_std_xy_mps" value="$(arg interceptor_disturbance_std_xy_mps)" />
+    <param name="interceptor_disturbance_std_z_mps" value="$(arg interceptor_disturbance_std_z_mps)" />
+    <param name="target_disturbance_std_xy_mps" value="$(arg target_disturbance_std_xy_mps)" />
+    <param name="target_disturbance_std_z_mps" value="$(arg target_disturbance_std_z_mps)" />
+    <param name="visual_disturbance_std_px" value="$(arg visual_disturbance_std_px)" />
+  </node>
+</launch>
