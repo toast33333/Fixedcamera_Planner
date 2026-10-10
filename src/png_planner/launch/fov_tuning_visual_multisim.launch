@@ -26,13 +26,13 @@
   <arg name="visual_disturbance_std_px" default="0.0" />
   <arg name="detection_range_m" default="120.0" />
   <arg name="fov_barrier_gain" default="0.20" />
-  <arg name="fov_barrier_max" default="3.0" />
+  <arg name="fov_barrier_max" default="4.0" />
   <arg name="fov_slowdown_start_ratio" default="0.99" />
   <arg name="fov_min_forward_speed_ratio" default="1.0" />
   <arg name="fov_emergency_yaw_ratio" default="0.85" />
   <arg name="k_z_ff" default="1.0" />
   <arg name="N_nav_z" default="2.0" />
-  <arg name="max_vz" default="1.6" />
+  <arg name="max_vz" default="2.0" />
   <arg name="k_yaw" default="1.5" />
   <arg name="k_yaw_d" default="0.3" />
   <arg name="max_yaw_rate" default="1.0" />

@@ -20,44 +20,97 @@ minimum_detection_score: 0.0
 bbox_center_is_offset: true
 cx: 480.0
 cy: 270.0
-center_tolerance_u_px: 40.0
-center_tolerance_v_px: 40.0
+center_tolerance_u_px: 80.0
+center_tolerance_v_px: 80.0
 detection_timeout_sec: 0.30
-required_centered_detections: 5
+required_centered_detections: 10
 
-# Constant-velocity alpha-beta prediction for the nominal 3 s radar update.
+# Four timestamped points initialise a robust horizontal constant-velocity fit.
+# Online tracking then uses a covariance CV Kalman filter.  The configured
+# 5.7735 m per-axis standard deviation corresponds to 10 m 3-D RMS error.
+# This experiment family assumes a level target, so estimated target vz is 0.
 expected_radar_period_sec: 3.0
-radar_timeout_sec: 7.0
-filter_alpha: 0.70
-filter_beta: 0.20
-max_target_speed_mps: 25.0
-max_radar_innovation_m: 80.0
+radar_timeout_sec: 9.5
+radar_bootstrap_samples: 4
+radar_measurement_std_m: 5.773502692
+radar_process_accel_std_mps2: 0.20
+radar_bootstrap_huber_delta_m: 10.0
+radar_nis_soft_threshold: 9.21
+radar_nis_reject_threshold: 25.0
+target_altitude_process_std_mps: 0.10
+max_target_speed_mps: 7.0
+max_target_horizontal_speed_mps: 7.0
+max_target_vertical_speed_mps: 0.0
+max_radar_innovation_m: 30.0
 
-# Terminal pursuit geometry. With a +20 deg optical axis and 20 m slant range,
-# the aircraft is about 18.79 m behind and 6.84 m below the target.
-terminal_camera_range_m: 20.0
+# Non-contact rendezvous geometry. With a +20 deg optical axis and 25 m slant
+# range, the aircraft is about 23.49 m behind and 8.55 m below the target.
+terminal_camera_range_m: 25.0
 camera_mount_pitch_deg: -20.0
 camera_mount_yaw_deg: 0.0
 camera_offset_body_x_m: 0.0
 camera_offset_body_y_m: 0.0
 camera_offset_body_z_m: 0.0
 minimum_course_speed_mps: 0.5
+course_full_confidence_std_deg: 12.0
+course_zero_confidence_std_deg: 35.0
+enforce_minimum_handover_altitude: true
+minimum_handover_altitude_m: 3.0
 
-# Moving-point approach: target velocity feed-forward + terminal-position error.
-position_gain_xy: 0.55
-position_gain_z: 0.45
+# Moving-point approach: target feed-forward plus a bounded correction.  The
+# correction is reduced near the target and all commands are acceleration
+# limited so a new radar frame cannot create a velocity step.
+position_gain_xy: 0.40
+position_gain_z: 0.35
+target_velocity_feedforward_gain_xy: 1.0
+target_velocity_feedforward_gain_z: 0.0
 yaw_gain: 1.2
 max_approach_speed_mps: 12.0
-max_vertical_speed_mps: 2.0
+max_vertical_speed_mps: 0.8
 max_yaw_rate_radps: 0.8
+max_position_correction_speed_mps: 6.0
+near_target_range_m: 35.0
+near_position_correction_speed_mps: 1.5
+# Use the remaining horizontal distance to the handover pose to schedule a
+# continuous braking speed.  This avoids slowing down merely because target
+# range has crossed a fixed threshold.  Set false to reproduce the archived
+# fixed-range slowdown behavior.
+use_braking_speed_profile: true
+approach_braking_deceleration_mps2: 2.0
+approach_braking_position_buffer_m: 2.5
+max_approach_acceleration_mps2: 1.5
+max_vertical_acceleration_mps2: 0.8
+max_yaw_acceleration_radps2: 0.6
+radar_coast_slowdown_start_sec: 5.0
+radar_coast_max_speed_mps: 1.0
 
-# Speed passed to the interception controller after handover:
+# Before handover, a fresh valid visual candidate is used only for small
+# vertical/yaw alignment corrections.  Any is_tracking=false frame still
+# resets the consecutive-centred count immediately.
+visual_alignment_blend: 0.5
+visual_alignment_max_vz_mps: 0.6
+visual_alignment_max_yaw_rate_radps: 0.35
+
+# Speed recommendation passed to the downstream controller after handover:
 # target horizontal speed + closing margin, with limits.
 closing_speed_margin_mps: 2.0
 min_handover_forward_speed_mps: 3.0
 max_handover_forward_speed_mps: 12.0
 
-handover_position_tolerance_m: 2.5
-handover_yaw_tolerance_deg: 10.0
+# Require visual lock, a safe estimated range, and proximity to the
+# radar-derived rendezvous pose.  The wider 25 m standoff keeps true handover
+# distance above 20 m in the validated 10 m-RMS radar-error matrix.
+use_legacy_pose_handover_gate: true
+handover_position_tolerance_m: 5.0
+handover_yaw_tolerance_deg: 20.0
+handover_min_estimated_range_m: 18.0
+handover_max_estimated_range_m: 38.0
+max_handover_velocity_std_mps: 1.0
+max_handover_radar_age_sec: 5.0
+max_handover_command_yaw_rate_radps: 0.30
+max_handover_closing_speed_mps: 2.0
 ibvs_candidate_timeout_sec: 0.20
+# Smooth the one-way command-ownership transfer.  After handover the original
+# fixed-camera/PN controller semantics are left unchanged.
+handover_blend_duration_sec: 2.0
 control_rate_hz: 20.0

@@ -124,11 +124,17 @@ def classify_failure(summary, params):
             return "目标垂向速度达到或超过抵近控制器 2 m/s 的垂向限幅"
         if params.get("target_speed_mps", 0.0) >= 12.0:
             return "目标水平速度达到或超过抵近控制器 12 m/s 的水平限幅，无法闭合距离"
-        if summary["minimum_terminal_error_m"] > 2.5:
-            return "未进入 2.5 m 交接位置容差，视觉控制未接管"
+        legacy_pose_gate = str(params.get(
+            "use_legacy_pose_handover_gate", True)).lower() in ("1", "true")
+        position_tolerance = float(params.get("handover_position_tolerance_m", 2.5))
+        if (legacy_pose_gate and
+                summary["minimum_terminal_error_m"] > position_tolerance):
+            return "未进入 %.1f m 交接位置容差，视觉控制未接管" % position_tolerance
         if summary["tracking_availability_percent"] < 20.0:
             return "抵近末端未形成稳定视觉检测，未满足连续居中交接条件"
-        return "位置、航向或连续居中检测条件未能同时满足，未发生视觉交接"
+        if legacy_pose_gate:
+            return "位置、航向或连续居中检测条件未能同时满足，未发生视觉交接"
+        return "时限内未同时满足连续居中、雷达估计健康及运动稳定条件，未发生视觉交接"
     if (summary["post_handover_tracking_availability_percent"] < 70.0 or
             summary["post_handover_max_fov_ratio"] > 1.0):
         return "视觉交接后目标频繁越出可用视场，未在时限内闭合到拦截半径"
@@ -176,8 +182,18 @@ def main():
     success_rows = handover_hold_rows if approach_only else [
         row for row in rows if row["phase"] == "SUCCESS_HOLD"]
 
+    # The approach node deliberately stops updating its predicted-target
+    # diagnostic after visual handover.  Restrict radar-estimator accuracy to
+    # the interval in which radar still owns the guidance loop; otherwise the
+    # last valid prediction is compared with a target that keeps moving and a
+    # successful visual intercept appears to have a growing radar error.
+    radar_evaluation_rows = [
+        row for row in active
+        if int(float(row.get("handover_complete", 0))) == 0]
+
     distances = finite(number(row, "distance_m") for row in (chase or rows))
-    prediction_errors = finite(vector_error(row, "predicted_target") for row in active)
+    prediction_errors = finite(
+        vector_error(row, "predicted_target") for row in radar_evaluation_rows)
     terminal_errors = finite(terminal_error(row) for row in active)
     fov_ratios = finite(
         max(number(row, "horizontal_fov_ratio"), number(row, "vertical_fov_ratio"))
@@ -224,6 +240,27 @@ def main():
     visual_disturbance_rms = rms_or_nan(
         math.hypot(number(row, "visual_disturbance_u_px"),
                    number(row, "visual_disturbance_v_px")) for row in chase)
+    radar_event_rows = []
+    previous_radar_samples = -1
+    for row in active:
+        sample_count = int(float(row.get("radar_samples", 0)))
+        if sample_count > previous_radar_samples:
+            if sample_count > 0:
+                radar_event_rows.append(row)
+            previous_radar_samples = sample_count
+    radar_bias_rms = rms_or_nan(
+        math.sqrt(number(row, "radar_bias_x_m") ** 2 +
+                  number(row, "radar_bias_y_m") ** 2 +
+                  number(row, "radar_bias_z_m") ** 2)
+        for row in radar_event_rows)
+    radar_measurement_error_rms = rms_or_nan(
+        number(row, "radar_measurement_error_m") for row in radar_event_rows)
+    visual_bias_rms = rms_or_nan(
+        math.hypot(number(row, "visual_bias_u_px"),
+                   number(row, "visual_bias_v_px")) for row in chase)
+    radar_delays = finite(number(row, "radar_delay_s") for row in radar_event_rows)
+    visual_delays = finite(number(row, "visual_delay_s") for row in chase)
+    guidance_delays = finite(number(row, "guidance_delay_s") for row in chase)
 
     summary = {
         "case_name": params.get("case_name", os.path.basename(run_dir)),
@@ -255,6 +292,8 @@ def main():
             100.0 * statistics.mean(tracking) if tracking else 0.0),
         "max_continuous_tracking_loss_s": maximum_continuous_false_duration(
             chase, "tracking"),
+        "post_handover_max_continuous_tracking_loss_s":
+            maximum_continuous_false_duration(post_handover, "tracking"),
         "max_fov_ratio": max_or_nan(fov_ratios),
         "post_handover_tracking_availability_percent": (
             100.0 * statistics.mean(post_handover_tracking)
@@ -312,6 +351,21 @@ def main():
         "interceptor_disturbance_rms_mps": interceptor_disturbance_rms,
         "target_disturbance_rms_mps": target_disturbance_rms,
         "visual_disturbance_rms_px": visual_disturbance_rms,
+        "radar_bias_rms_m": radar_bias_rms,
+        "radar_measurement_error_rms_m": radar_measurement_error_rms,
+        "radar_delay_mean_s": mean_or_nan(radar_delays),
+        "radar_delay_max_s": max_or_nan(radar_delays),
+        "radar_dropped_count": max(
+            int(float(row.get("radar_dropped_count", 0))) for row in rows),
+        "visual_bias_rms_px": visual_bias_rms,
+        "visual_delay_mean_s": mean_or_nan(visual_delays),
+        "visual_delay_p95_s": percentile_or_nan(visual_delays, 95.0),
+        "visual_dropped_count": max(
+            int(float(row.get("visual_dropped_count", 0))) for row in rows),
+        "guidance_delay_mean_s": mean_or_nan(guidance_delays),
+        "guidance_delay_p95_s": percentile_or_nan(guidance_delays, 95.0),
+        "guidance_dropped_count": max(
+            int(float(row.get("guidance_dropped_count", 0))) for row in rows),
         "analysis_start_time_s": t0,
     }
     summary["visual_only_pass"] = bool(
@@ -321,8 +375,16 @@ def main():
         math.isfinite(summary["initial_chase_fov_ratio"]) and
         summary["initial_chase_fov_ratio"] < 1.0 and
         summary["post_handover_fov_exceedance_percent"] == 0.0 and
-        summary["max_continuous_tracking_loss_s"] <= 0.300001)
+        summary["post_handover_max_continuous_tracking_loss_s"] <= 0.300001)
     summary["reason"] = classify_failure(summary, params)
+    summary["full_chain_pass"] = bool(
+        not summary["visual_only"] and summary["success"] and
+        summary["handover_occurred"] and
+        summary["post_handover_tracking_availability_percent"] >= 99.0 and
+        summary["post_handover_max_continuous_tracking_loss_s"] <= 0.300001 and
+        math.isfinite(summary["post_handover_max_fov_ratio"]) and
+        summary["post_handover_max_fov_ratio"] < 1.0 and
+        summary["post_handover_fov_exceedance_percent"] == 0.0)
 
     with open(os.path.join(run_dir, "summary.json"), "w", encoding="utf-8") as stream:
         json.dump(summary, stream, ensure_ascii=False, indent=2, allow_nan=True)
@@ -342,11 +404,11 @@ def main():
         summary["pre_chase_tracking_samples"],
         "initial CHASE tracking / FOV ratio: %s / %.3f" % (
             summary["initial_chase_tracking"], summary["initial_chase_fov_ratio"]),
-        "initial/minimum/final distance: %.2f / %.2f / %.2f m" % (
+        "CHASE initial/minimum/final distance: %.2f / %.2f / %.2f m" % (
             summary["initial_chase_distance_m"], summary["minimum_distance_m"],
             summary["final_distance_m"]),
         "chase duration: %.2f s" % summary["chase_duration_s"],
-        "capture time / timeout fraction / success distance: %.2f s / %.3f / %.3f m" % (
+        "capture time / chase-budget fraction / success distance: %.2f s / %.3f / %.3f m" % (
             summary["capture_time_from_chase_s"], summary["capture_time_fraction"],
             summary["capture_distance_at_success_m"]),
         "handover time from chase: %.2f s" % summary["handover_time_from_chase_s"],
@@ -360,6 +422,8 @@ def main():
         summary["post_handover_tracking_availability_percent"],
         "maximum continuous tracking loss: %.3f s" %
         summary["max_continuous_tracking_loss_s"],
+        "maximum continuous tracking loss after handover: %.3f s" %
+        summary["post_handover_max_continuous_tracking_loss_s"],
         "maximum normalized FOV usage: %.3f" % summary["max_fov_ratio"],
         "maximum normalized FOV after handover: %.3f" %
         summary["post_handover_max_fov_ratio"],
@@ -383,6 +447,17 @@ def main():
             summary["interceptor_disturbance_rms_mps"],
             summary["target_disturbance_rms_mps"],
             summary["visual_disturbance_rms_px"]),
+        "radar measurement/bias RMS, delay mean/max, drops: %.3f / %.3f m, %.3f / %.3f s, %d" % (
+            summary["radar_measurement_error_rms_m"],
+            summary["radar_bias_rms_m"], summary["radar_delay_mean_s"],
+            summary["radar_delay_max_s"], summary["radar_dropped_count"]),
+        "visual bias RMS, delay mean/p95, drops: %.3f px, %.3f / %.3f s, %d" % (
+            summary["visual_bias_rms_px"], summary["visual_delay_mean_s"],
+            summary["visual_delay_p95_s"], summary["visual_dropped_count"]),
+        "guidance delay mean/p95, drops, full-chain pass: %.3f / %.3f s, %d, %s" % (
+            summary["guidance_delay_mean_s"],
+            summary["guidance_delay_p95_s"],
+            summary["guidance_dropped_count"], summary["full_chain_pass"]),
     ]
     text = "\n".join(lines) + "\n"
     with open(os.path.join(run_dir, "summary.txt"), "w", encoding="utf-8") as stream:
@@ -394,11 +469,17 @@ def main():
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        plot_rows = active or rows
+        plot_rows = list(active or rows)
+        if active and success_rows:
+            plot_rows.append(success_rows[0])
         times = [number(row, "ros_time_s") - t0 for row in plot_rows]
         range_values = [number(row, "distance_m") for row in plot_rows]
-        terminal_values = [terminal_error(row) for row in plot_rows]
-        prediction_values = [vector_error(row, "predicted_target") for row in plot_rows]
+        terminal_values = [terminal_error(row)
+                           if int(float(row.get("handover_complete", 0))) == 0
+                           else float("nan") for row in plot_rows]
+        prediction_values = [vector_error(row, "predicted_target")
+                             if int(float(row.get("handover_complete", 0))) == 0
+                             else float("nan") for row in plot_rows]
         fov_values = [max(number(row, "horizontal_fov_ratio"),
                           number(row, "vertical_fov_ratio")) for row in plot_rows]
         target_speeds = [horizontal_speed(row, "target") for row in plot_rows]
@@ -411,6 +492,11 @@ def main():
         axes[0].plot(times, range_values, color="black", label="separation")
         axes[0].axhline(params.get("capture_distance_m", 5.0), color="green",
                         linestyle="--", label="capture threshold")
+        if success_rows:
+            axes[0].scatter(
+                [number(success_rows[0], "ros_time_s") - t0],
+                [capture_distance_at_success], color="green", zorder=3,
+                label="success decision frame")
         axes[0].set_ylabel("range (m)")
         axes[0].legend(loc="best")
         if visual_only:
@@ -419,8 +505,10 @@ def main():
         else:
             axes[1].plot(times, terminal_values, label="terminal pose error")
             axes[1].plot(times, prediction_values, label="radar prediction error")
-            axes[1].axhline(
-                2.5, color="gray", linestyle="--", label="handover tolerance")
+            if str(params.get("use_legacy_pose_handover_gate", True)).lower() in ("1", "true"):
+                axes[1].axhline(
+                    float(params.get("handover_position_tolerance_m", 2.5)),
+                    color="gray", linestyle="--", label="handover tolerance")
             axes[1].set_ylabel("error (m)")
             axes[1].legend(loc="best")
             speed_axis = axes[2]
@@ -438,6 +526,9 @@ def main():
         fov_axis.legend(loc="best")
         for axis in axes:
             axis.grid(True, alpha=0.3)
+            if handover_rows:
+                axis.axvline(number(handover_rows[0], "ros_time_s") - t0,
+                             color="teal", linestyle=":", alpha=0.7)
         figure.suptitle("%s: %s" % (
             summary["case_name"], "SUCCESS" if success else "FAILURE"))
         figure.tight_layout(rect=(0, 0, 1, 0.97))

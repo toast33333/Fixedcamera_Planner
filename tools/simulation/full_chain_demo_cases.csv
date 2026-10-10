@@ -1,0 +1,13 @@
+CASE_NAME,TEST_GROUP,ERROR_PROFILE,TARGET_SPAWN_X,TARGET_SPAWN_Y,TARGET_ALTITUDE_M,TARGET_SPEED_MPS,TARGET_HEADING_DEG,TARGET_TURN_RATE_DEGPS,TARGET_CLIMB_RATE_MPS,CHASE_TIMEOUT_S,DISTURBANCE_SEED,RADAR_SEED
+demo_tail_clean,tail,clean,70,0,9,2,0,0,0,50,20260928,20260928
+demo_tail_mild_s101,tail,mild,70,0,9,2,0,0,0,50,101,101
+demo_tail_mild_s202,tail,mild,70,0,9,2,0,0,0,50,202,202
+demo_tail_mild_s303,tail,mild,70,0,9,2,0,0,0,50,303,303
+demo_cross90_clean,cross90,clean,55,-25,9,4,90,0,0,55,20260928,20260928
+demo_cross90_mild_s101,cross90,mild,55,-25,9,4,90,0,0,55,101,101
+demo_cross90_mild_s202,cross90,mild,55,-25,9,4,90,0,0,55,202,202
+demo_cross90_mild_s303,cross90,mild,55,-25,9,4,90,0,0,55,303,303
+demo_climb08_clean,climb08,clean,65,0,12,5,0,0,0.8,60,20260928,20260928
+demo_climb08_mild_s101,climb08,mild,65,0,12,5,0,0,0.8,60,101,101
+demo_climb08_mild_s202,climb08,mild,65,0,12,5,0,0,0.8,60,202,202
+demo_climb08_mild_s303,climb08,mild,65,0,12,5,0,0,0.8,60,303,303

@@ -43,17 +43,20 @@ calibration order, and current limitations are documented in
 ## Radar approach and visual handover
 
 `radar_approach_handover` adds the approach stage in front of the existing
-fixed-camera interception controller. It estimates constant target velocity
-from the nominal 3 s radar position updates and continuously extrapolates the
-target between updates. The moving terminal point is 20 m from the target on
-the fixed camera optical axis, with aircraft yaw aligned to the estimated
-target course.
+fixed-camera interception controller. It uses a robust four-frame bootstrap
+and a covariance constant-velocity filter for the nominal 3 s radar position
+updates, then continuously extrapolates the target between updates. The
+validated rendezvous profile places the moving terminal point 25 m from the
+target on the fixed-camera optical axis, with aircraft yaw aligned to the
+estimated target course.
 
 The integrated launch uses a single command owner: the visual controller sends
 a candidate command to the approach node; only the approach node publishes the
 final MAVROS command. It switches from radar approach to visual interception
-after the terminal position/yaw tolerances and consecutive centered detections
-are all satisfied.
+after the safe-range, terminal position/yaw, radar-health, command-stability,
+and consecutive centered-detection gates are all satisfied. Approach speed is
+scheduled from the remaining distance to the handover pose so that the
+aircraft stays fast when far away and brakes continuously near handover.
 
 ```bash
 catkin_make

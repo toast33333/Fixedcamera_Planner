@@ -105,6 +105,5 @@ class FixedCameraMathTest(unittest.TestCase):
         self.assertEqual(ramp_forward_speed(8.0, 3.5, 1.0, 0.02), 3.5)
         self.assertEqual(ramp_forward_speed(2.0, 8.0, 0.0, 0.02), 8.0)
 
-
 if __name__ == "__main__":
     unittest.main()

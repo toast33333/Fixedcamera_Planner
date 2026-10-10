@@ -6,6 +6,7 @@
 #include <geometry_msgs/Vector3Stamped.h>
 #include <kcf_msgs/Bbox.h>
 #include <sensor_msgs/Imu.h>
+#include <std_msgs/Bool.h>
 #include <std_msgs/Float64.h>
 #include <tf/tf.h>
 
@@ -98,6 +99,18 @@ public:
                 continue;
             }
 
+            if (enable_state_valid_topic_ &&
+                (!state_valid_ || state_valid_stamp_.isZero() ||
+                 (now - state_valid_stamp_).toSec() > state_valid_timeout_sec_)) {
+                resetLosStateIfNeeded();
+                publishInvalidStateCommand(now);
+                ROS_WARN_THROTTLE(1.0,
+                                  "[FixedCameraIBVS] State estimate invalid or stale; "
+                                  "publishing zero velocity.");
+                rate.sleep();
+                continue;
+            }
+
             const bool target_valid =
                 have_detection_ && (now - last_detection_time_).toSec() <= lost_timeout_sec_;
 
@@ -155,7 +168,7 @@ private:
         nh.param("enable_height_control", enable_height_control_, true);
         nh.param("k_z_ff", vertical_position_gain_, 1.0);
         nh.param("N_nav_z", vertical_navigation_gain_, 2.0);
-        nh.param("max_vz", max_vertical_velocity_, 1.4);
+        nh.param("max_vz", max_vertical_velocity_, 2.0);
         nh.param("vertical_integrator_decay", vertical_integrator_decay_, 0.98);
 
         // The paper defines horizontal and vertical FOV constraints as half angles.
@@ -171,7 +184,7 @@ private:
         nh.param("fov_vertical_limit_deg", fov_vertical_limit_deg_,
                  0.5 * legacy_vfov_deg * legacy_margin_ratio);
         nh.param("fov_barrier_gain", fov_barrier_gain_, 0.20);
-        nh.param("fov_barrier_max", fov_barrier_max_, 3.0);
+        nh.param("fov_barrier_max", fov_barrier_max_, 4.0);
         nh.param("fov_slowdown_start_ratio", fov_slowdown_start_ratio_, 0.99);
         nh.param("fov_min_forward_speed_ratio", fov_min_forward_speed_ratio_, 1.0);
         nh.param("fov_emergency_yaw_ratio", fov_emergency_yaw_ratio_, 0.85);
@@ -186,6 +199,11 @@ private:
         nh.param("max_los_prediction_sec", max_los_prediction_sec_, 0.25);
         nh.param("pose_history_sec", pose_history_sec_, 1.0);
         nh.param("enable_attitude_compensation", enable_attitude_compensation_, true);
+        nh.param("use_pose_orientation", use_pose_orientation_, true);
+        nh.param("enable_state_valid_topic", enable_state_valid_topic_, false);
+        nh.param<std::string>("state_valid_topic", state_valid_topic_,
+                              "/inslib/state_valid");
+        nh.param("state_valid_timeout_sec", state_valid_timeout_sec_, 0.15);
 
         double lambda_alpha_legacy = 0.2;
         int lambda_window_size_legacy = 3;
@@ -299,6 +317,11 @@ private:
             forward_speed_sub_ = nh.subscribe(
                 forward_speed_topic_, 1,
                 &FixedCameraIbvsController::forwardSpeedCallback, this);
+        }
+        if (enable_state_valid_topic_) {
+            state_valid_sub_ = nh.subscribe(
+                state_valid_topic_, 10,
+                &FixedCameraIbvsController::stateValidCallback, this);
         }
         command_pub_ = nh.advertise<geometry_msgs::TwistStamped>(command_topic_, 1);
         los_debug_pub_ = nh.advertise<geometry_msgs::Vector3Stamped>(los_debug_topic_, 1);
@@ -616,6 +639,16 @@ private:
                                  lost_forward_speed_, 0.0, 0.0, 0.0);
     }
 
+    void publishInvalidStateCommand(const ros::Time& now) {
+        forward_speed_ramp_initialized_ = false;
+        active_forward_speed_ = 0.0;
+        nominal_forward_speed_ = 0.0;
+        publishBodyVelocity(now, 0.0, 0.0, 0.0, 0.0);
+        publishCommandComparison(now,
+                                 0.0, 0.0, 0.0, 0.0,
+                                 0.0, 0.0, 0.0, 0.0);
+    }
+
     geometry_msgs::TwistStamped makeBodyVelocityCommand(
         const ros::Time& stamp,
         double forward,
@@ -767,7 +800,9 @@ private:
     }
 
     void poseCallback(const geometry_msgs::PoseStamped::ConstPtr& message) {
-        recordAttitude(message->pose.orientation, message->header.stamp);
+        if (use_pose_orientation_) {
+            recordAttitude(message->pose.orientation, message->header.stamp);
+        }
         have_pose_ = true;
     }
 
@@ -786,6 +821,11 @@ private:
             message->data, min_forward_speed_, max_forward_speed_);
         forward_speed_ += forward_speed_smoothing_alpha_ *
                           (requested - forward_speed_);
+    }
+
+    void stateValidCallback(const std_msgs::Bool::ConstPtr& message) {
+        state_valid_ = message->data;
+        state_valid_stamp_ = ros::Time::now();
     }
 
     double fx_ = 640.0;
@@ -827,7 +867,7 @@ private:
     bool enable_height_control_ = true;
     double vertical_position_gain_ = 1.0;
     double vertical_navigation_gain_ = 2.0;
-    double max_vertical_velocity_ = 1.0;
+    double max_vertical_velocity_ = 2.0;
     double vertical_integrator_decay_ = 0.98;
     double vertical_velocity_integral_ = 0.0;
     double nominal_vertical_velocity_integral_ = 0.0;
@@ -835,7 +875,7 @@ private:
     double fov_horizontal_limit_deg_ = 23.94;
     double fov_vertical_limit_deg_ = 18.54;
     double fov_barrier_gain_ = 0.20;
-    double fov_barrier_max_ = 3.0;
+    double fov_barrier_max_ = 4.0;
     double fov_slowdown_start_ratio_ = 0.99;
     double fov_min_forward_speed_ratio_ = 1.0;
     double fov_emergency_yaw_ratio_ = 0.85;
@@ -850,6 +890,10 @@ private:
     double max_los_prediction_sec_ = 0.25;
     double pose_history_sec_ = 1.0;
     bool enable_attitude_compensation_ = true;
+    bool use_pose_orientation_ = true;
+    bool enable_state_valid_topic_ = false;
+    bool state_valid_ = false;
+    double state_valid_timeout_sec_ = 0.15;
 
     double lambda_q_position_ = 1e-4;
     double lambda_q_rate_ = 5e-1;
@@ -873,6 +917,7 @@ private:
     std::string fov_debug_topic_;
     std::string nominal_command_debug_topic_;
     std::string fov_correction_debug_topic_;
+    std::string state_valid_topic_;
 
     DetectionData last_detection_;
     ros::Time last_detection_time_;
@@ -886,6 +931,7 @@ private:
     bool have_pose_ = false;
     double current_horizontal_speed_ = 0.0;
     ros::Time last_control_time_;
+    ros::Time state_valid_stamp_;
 
     ros::Subscriber detection_sub_kcf_;
     ros::Subscriber detection_sub_detection_;
@@ -893,6 +939,7 @@ private:
     ros::Subscriber attitude_sub_;
     ros::Subscriber velocity_sub_;
     ros::Subscriber forward_speed_sub_;
+    ros::Subscriber state_valid_sub_;
     ros::Publisher command_pub_;
     ros::Publisher los_debug_pub_;
     ros::Publisher fov_debug_pub_;

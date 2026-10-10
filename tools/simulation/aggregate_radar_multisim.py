@@ -20,7 +20,39 @@ SUMMARY_FIELDS = [
     "mean_target_horizontal_speed_mps",
     "mean_interceptor_horizontal_speed_mps",
     "maximum_interceptor_horizontal_speed_mps", "radar_samples", "reason",
+    "full_chain_pass", "post_handover_p95_fov_ratio",
+    "max_continuous_tracking_loss_s", "capture_time_from_chase_s",
+    "capture_distance_at_success_m",
+    "post_handover_max_continuous_tracking_loss_s",
+    "radar_measurement_error_rms_m", "radar_bias_rms_m",
+    "radar_delay_mean_s", "radar_delay_max_s", "radar_dropped_count",
+    "visual_bias_rms_px", "visual_delay_mean_s", "visual_delay_p95_s",
+    "visual_dropped_count", "guidance_delay_mean_s",
+    "guidance_delay_p95_s", "guidance_dropped_count",
+    "radar_noise_std_m", "radar_period_sec", "radar_timeout_sec",
+    "radar_bootstrap_samples", "filter_alpha", "filter_beta",
+    "max_radar_innovation_m", "max_target_speed_mps",
+    "max_target_horizontal_speed_mps", "max_target_vertical_speed_mps",
+    "radar_measurement_std_m", "radar_process_accel_std_mps2",
 ]
+
+
+RADAR_CONFIG_FIELDS = {
+    "radar_noise_std_m", "radar_period_sec", "radar_timeout_sec",
+    "radar_bootstrap_samples", "filter_alpha", "filter_beta",
+    "max_radar_innovation_m", "max_target_speed_mps",
+    "max_target_horizontal_speed_mps", "max_target_vertical_speed_mps",
+    "radar_measurement_std_m", "radar_process_accel_std_mps2",
+}
+
+
+def setting(record, key, default=None):
+    """Read a setting from case_params, falling back to old summary files."""
+    params = record.get("params") or {}
+    value = params.get(key)
+    if value is None or value == "":
+        value = record.get(key, default)
+    return default if value is None or value == "" else value
 
 
 def fmt(value, digits=2):
@@ -33,6 +65,14 @@ def fmt(value, digits=2):
     if not math.isfinite(value):
         return "—"
     return ("%." + str(digits) + "f") % value
+
+
+def fmt_setting(record, key, digits=2, default="未记录"):
+    """Format an optional recorded setting without leaking ``None`` to reports."""
+    value = setting(record, key)
+    if value is None or value == "":
+        return default
+    return fmt(value, digits)
 
 
 def load_batch(batch_dir):
@@ -61,7 +101,11 @@ def write_csv_summary(batch_dir, records):
         writer = csv.DictWriter(stream, fieldnames=SUMMARY_FIELDS)
         writer.writeheader()
         for record in records:
-            writer.writerow({key: record.get(key) for key in SUMMARY_FIELDS})
+            writer.writerow({
+                key: (setting(record, key) if key in RADAR_CONFIG_FIELDS else
+                      record.get(key))
+                for key in SUMMARY_FIELDS
+            })
 
 
 def build_report(batch_dir, records):
@@ -86,17 +130,18 @@ def build_report(batch_dir, records):
         "",
         "## 工况与结果",
         "",
-        "| 工况 | 预期 | 结果 | 交接 | 最小距离 m | 交接时间 s | 雷达预测 RMSE m | 视觉可用率 | 最大 FOV 比 |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| 工况 | 预期 | 结果 | 交接 | 成功判定距离 m | CHASE最小距离 m | 交接时间 s | 雷达预测 RMSE m | 视觉可用率 | 最大 FOV 比 |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for record in records:
         lines.append(
-            "| {name} | {expected} | {result} | {handover} | {distance} | {handover_time} | "
+            "| {name} | {expected} | {result} | {handover} | {capture_distance} | {distance} | {handover_time} | "
             "{radar_rmse} | {tracking}% | {fov} |".format(
                 name=record["case_name"],
                 expected=record.get("expected_result", "—"),
                 result="成功" if record.get("success") else "失败",
                 handover="是" if record.get("handover_occurred") else "否",
+                capture_distance=fmt(record.get("capture_distance_at_success_m")),
                 distance=fmt(record.get("minimum_distance_m")),
                 handover_time=fmt(record.get("handover_time_from_chase_s")),
                 radar_rmse=fmt(record.get("radar_prediction_rmse_m")),
@@ -106,23 +151,46 @@ def build_report(batch_dir, records):
 
     lines.extend(["", "## 逐工况判读", ""])
     for record in records:
-        params = record.get("params", {})
+        radar_noise_std = setting(record, "radar_noise_std_m")
+        try:
+            radar_noise_3d_rms = math.sqrt(3.0) * float(radar_noise_std)
+        except (TypeError, ValueError):
+            radar_noise_3d_rms = None
+        if setting(record, "radar_measurement_std_m") is not None:
+            filter_description = "CV Kalman滤波，测量标准差 %s m，过程加速度标准差 %s m/s²" % (
+                fmt_setting(record, "radar_measurement_std_m"),
+                fmt_setting(record, "radar_process_accel_std_mps2"))
+        else:
+            filter_description = "α-β滤波 α/β=%s/%s" % (
+                fmt_setting(record, "filter_alpha"),
+                fmt_setting(record, "filter_beta"))
         lines.extend([
             "### %s — %s" % (
                 record["case_name"], "成功" if record.get("success") else "失败"),
             "",
-            "- 条件：靶机 %.1f m/s，航向 %.1f°，转弯率 %.1f°/s，爬升率 %.1f m/s；"
-            "雷达周期 %.1f s，位置噪声标准差 %.1f m，断更时长 %.1f s。" % (
-                params.get("target_speed_mps", float("nan")),
-                params.get("target_heading_deg", float("nan")),
-                params.get("target_turn_rate_degps", float("nan")),
-                params.get("target_climb_rate_mps", float("nan")),
-                params.get("radar_period_sec", float("nan")),
-                params.get("radar_noise_std_m", float("nan")),
-                params.get("radar_dropout_duration_sec", float("nan"))),
-            "- 结果：最小距离 %s m，末端位置误差最小值 %s m，雷达预测 RMSE %s m，"
+            "- 条件：靶机 %s m/s，航向 %s°，转弯率 %s°/s，爬升率 %s m/s；"
+            "雷达周期 %s s，位置白噪声每轴σ=%s m（等效三维RMS≈%s m），"
+            "断更时长 %s s。" % (
+                fmt_setting(record, "target_speed_mps", 1),
+                fmt_setting(record, "target_heading_deg", 1),
+                fmt_setting(record, "target_turn_rate_degps", 1),
+                fmt_setting(record, "target_climb_rate_mps", 1),
+                fmt_setting(record, "radar_period_sec"),
+                fmt_setting(record, "radar_noise_std_m"),
+                (fmt(radar_noise_3d_rms) if radar_noise_3d_rms is not None
+                 else "未记录"),
+                fmt_setting(record, "radar_dropout_duration_sec")),
+            "- 雷达鲁棒参数：初始化样本数 %s，%s，"
+            "创新保护阈值 %s m，目标速度上限 %s m/s。" % (
+                fmt_setting(record, "radar_bootstrap_samples", 0),
+                filter_description,
+                fmt_setting(record, "max_radar_innovation_m", 1),
+                fmt_setting(record, "max_target_speed_mps", 1)),
+            "- 结果：CHASE阶段最小距离 %s m，成功判定首帧距离 %s m，"
+            "末端位置误差最小值 %s m，雷达预测 RMSE %s m，"
             "视觉跟踪可用率 %s%%。" % (
                 fmt(record.get("minimum_distance_m")),
+                fmt(record.get("capture_distance_at_success_m")),
                 fmt(record.get("minimum_terminal_error_m")),
                 fmt(record.get("radar_prediction_rmse_m")),
                 fmt(record.get("post_handover_tracking_availability_percent"), 1)),
@@ -143,9 +211,9 @@ def build_report(batch_dir, records):
         "",
         "## 适用范围与限制",
         "",
-        "- 雷达输入是 Gazebo 真值按设定周期采样后叠加白噪声，尚未加入系统偏差、时间戳乱序和坐标标定误差。",
+        "- 雷达输入由 Gazebo 真值生成，可配置白噪声、有界随机游走偏置、采样周期抖动、传输延迟和随机丢包；尚未覆盖坐标标定误差与消息乱序。",
         "- 视觉检测采用几何投影，在距离和视场内即认为可检测；没有验证真实检测器在模糊、遮挡和光照变化下的性能。",
-        "- 靶机由速度指令驱动，机体动力学仍由 PX4 SITL 与 Gazebo 执行；未模拟风场和通信网络拥塞。",
+        "- 靶机由速度指令驱动，机体动力学由 PX4 SITL 与 Gazebo 执行；展示批次可配置物理风、等效跟踪残差和命令传输延迟，但不等同于真实网络拥塞模型。",
         "- 成功半径为 5 m，结果用于证明代码链路和控制思路可闭合，不等同于实飞安全结论。",
         "",
         "## 可复现性",
@@ -168,14 +236,23 @@ def plot_comparison(batch_dir, records):
         names = [record["case_name"] for record in records]
         x = np.arange(len(names))
         colors = ["#2a9d8f" if record.get("success") else "#e76f51" for record in records]
-        minimum_range = [record.get("minimum_distance_m", float("nan")) for record in records]
+        # The phase is switched to SUCCESS_HOLD before the threshold-crossing
+        # row is written, so minimum_distance_m intentionally describes CHASE
+        # only.  Plot the decision-frame distance for successes to avoid bars
+        # above the capture threshold being mistaken for contradictory results.
+        decision_range = [
+            (record.get("capture_distance_at_success_m", float("nan"))
+             if record.get("success") else
+             record.get("minimum_distance_m", float("nan")))
+            for record in records
+        ]
         radar_rmse = [record.get("radar_prediction_rmse_m", float("nan")) for record in records]
         tracking = [record.get("post_handover_tracking_availability_percent", float("nan")) for record in records]
 
         figure, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
-        axes[0].bar(x, minimum_range, color=colors)
+        axes[0].bar(x, decision_range, color=colors)
         axes[0].axhline(5.0, color="black", linestyle="--", label="capture threshold")
-        axes[0].set_ylabel("minimum range (m)")
+        axes[0].set_ylabel("success decision / closest CHASE range (m)")
         axes[0].legend(loc="best")
         axes[1].bar(x, radar_rmse, color="#457b9d")
         axes[1].set_ylabel("radar prediction RMSE (m)")

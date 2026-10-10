@@ -36,13 +36,13 @@ yaw_enable_speed_ratio: 0.1
 enable_height_control: true
 k_z_ff: 1.0
 N_nav_z: 2.0
-max_vz: 1.6
+max_vz: 2.0
 vertical_integrator_decay: 0.98
 
 fov_horizontal_limit_deg: 23.94
 fov_vertical_limit_deg: 18.54
 fov_barrier_gain: 0.20
-fov_barrier_max: 3.0
+fov_barrier_max: 4.0
 fov_slowdown_start_ratio: 0.99
 fov_min_forward_speed_ratio: 1.0
 fov_emergency_yaw_ratio: 0.85

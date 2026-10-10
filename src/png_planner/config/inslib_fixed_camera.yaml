@@ -1,0 +1,146 @@
+# INSLIB state estimator for the fixed-camera controller.
+#
+# IMPORTANT:
+# 1. This node consumes RAW sensor measurements. Do not feed
+#    /mavros/local_position/pose or PX4 fused velocity back into INSLIB.
+# 2. All zero calibration matrices mean identity in INSLIB.
+# 3. Noise density and random-walk values left at 0 use INSLIB's conservative
+#    consumer-MEMS defaults. Replace them with values measured on the real IMU.
+
+topics:
+  imu: /mavros/imu/data_raw
+  gnss_position: /mavros/global_position/raw/fix
+  # Check the exact topic on the aircraft with `rostopic list | grep gps_vel`.
+  # This must be receiver/raw GNSS velocity, not EKF local velocity.
+  gnss_velocity: /mavros/global_position/raw/gps_vel
+  magnetometer: /mavros/imu/mag
+  barometer: /mavros/imu/static_pressure
+
+sensors:
+  use_gnss_position: true
+  use_gnss_velocity: true
+  # Disabled initially because motor current and the airframe can bias yaw.
+  # Enable only after hard/soft-iron calibration on the assembled aircraft.
+  use_magnetometer: false
+  use_barometer: true
+
+# MAVROS normally publishes ROS body FLU and world ENU data. Change these only
+# after checking the actual driver/topic conventions.
+frames:
+  imu_body: flu                    # flu or frd
+  magnetometer_body: flu           # flu or frd
+  gnss_velocity_world: enu         # enu or ned
+
+outputs:
+  imu: /inslib/imu/data
+  pose: /inslib/local_position/pose
+  velocity: /inslib/local_position/velocity_local
+  odometry: /inslib/odometry
+  ready: /inslib/state_valid
+  mode: /inslib/mode
+  attitude_stddev: /inslib/attitude_stddev_deg
+  world_frame: map
+  body_frame: base_link
+  # Rotate the whole INSLIB ENU solution into PX4/MAVROS's local map frame.
+  # Keep 0 when both systems use true N/E axes. Measure before changing it.
+  world_yaw_alignment_deg: 0.0
+  # The alternate controller is inhibited when the largest attitude 1-sigma
+  # exceeds this threshold. Set <=0 only for diagnosis, never for flight.
+  max_attitude_stddev_deg: 5.0
+  status_rate_hz: 5.0
+
+imu:
+  nominal_rate_hz: 100.0
+  minimum_rate_hz: 80.0
+  # Noise amplitude densities (not plain sample standard deviations).
+  # Q used by INSLIB is density^2. Zero selects INSLIB defaults.
+  accelerometer_noise_density_mps2_sqrthz: 0.0
+  gyroscope_noise_density_rps_sqrthz: 0.0
+
+calibration:
+  # corrected = M * (raw - fixed_bias), M is column-major.
+  accelerometer_fixed_bias_mps2: [0.0, 0.0, 0.0]
+  gyroscope_fixed_bias_rps: [0.0, 0.0, 0.0]
+  accelerometer_matrix_column_major: [0.0, 0.0, 0.0,
+                                      0.0, 0.0, 0.0,
+                                      0.0, 0.0, 0.0]
+  gyroscope_matrix_column_major: [0.0, 0.0, 0.0,
+                                  0.0, 0.0, 0.0,
+                                  0.0, 0.0, 0.0]
+  magnetometer_fixed_bias_ut: [0.0, 0.0, 0.0]
+  magnetometer_matrix_column_major: [0.0, 0.0, 0.0,
+                                     0.0, 0.0, 0.0,
+                                     0.0, 0.0, 0.0]
+
+initial:
+  position_stddev_m: 5.0
+  velocity_stddev_mps: 1.0
+  roll_pitch_stddev_deg: 5.0
+  # Without calibrated magnetometer or absolute heading, yaw begins unknown.
+  yaw_stddev_deg: 180.0
+  accelerometer_bias_stddev_mps2: 0.20
+  gyroscope_bias_stddev_rps: 0.02
+
+process:
+  # Bias random-walk amplitude densities. Zero selects INSLIB defaults.
+  accelerometer_bias_random_walk_mps2_sqrthz: 0.0
+  gyroscope_bias_random_walk_rps_sqrthz: 0.0
+
+filter:
+  auto_init: true
+  # Strapdown still runs at full IMU rate; covariance is updated at 50 Hz.
+  kalman_update_period_sec: 0.02
+  max_prediction_time_sec: 0.10
+  max_deadreckoning_sec: 10.0
+  allow_unlimited_deadreckoning: false
+  disable_outlier_rejection: false
+  disable_auto_zupt: false
+  disable_baro_height: false
+
+gnss:
+  # Header age is measured automatically. This is only unreported receiver /
+  # transport latency and must be found from logs, not guessed.
+  additional_delay_ms: 0
+  max_pair_time_difference_ms: 30
+
+  # Antenna position relative to the IMU origin: x forward, y right, z down.
+  antenna_lever_arm_frd_m: [0.0, 0.0, 0.0]
+
+  # Used only when the ROS message carries no usable covariance.
+  fallback_position_stddev_horizontal_m: 1.5
+  fallback_position_stddev_vertical_m: 3.0
+  velocity_stddev_horizontal_mps: 0.20
+  velocity_stddev_vertical_mps: 0.30
+
+  # Fusion weighting: scale reported standard deviations and apply floors.
+  position_covariance_scale: 1.0
+  velocity_covariance_scale: 1.0
+  position_stddev_floor_horizontal_m: 0.5
+  position_stddev_floor_vertical_m: 1.0
+  velocity_stddev_floor_horizontal_mps: 0.10
+  velocity_stddev_floor_vertical_mps: 0.15
+
+  # When position and velocity come from the same GNSS solution, fuse position
+  # only every fifth common epoch while retaining velocity at full rate.
+  position_decimation: 5
+
+  init_dwell_sec: 2.0
+  start_max_position_stddev_horizontal_m: 2.0
+  start_max_position_stddev_vertical_m: 3.0
+  start_max_velocity_stddev_horizontal_mps: 0.30
+  start_max_velocity_stddev_vertical_mps: 0.50
+  stop_max_position_stddev_horizontal_m: 5.0
+  stop_max_position_stddev_vertical_m: 7.0
+  stop_max_velocity_stddev_horizontal_mps: 0.50
+  stop_max_velocity_stddev_vertical_mps: 0.70
+
+magnetometer:
+  # Decimal year for the World Magnetic Model. Update for the experiment date.
+  wmm_year: 2026.75
+
+barometer:
+  altitude_stddev_m: 2.0
+
+auxiliary:
+  # Old magnetometer/barometer samples are not re-fused as current data.
+  max_sample_age_sec: 0.25

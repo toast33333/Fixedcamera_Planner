@@ -8,12 +8,57 @@
   <arg name="target_altitude_m" default="9.0" />
   <arg name="capture_distance_m" default="5.0" />
   <arg name="chase_timeout_s" default="45.0" />
+  <arg name="result_hold_duration_sec" default="2.0" />
   <arg name="radar_period_sec" default="3.0" />
-  <arg name="radar_timeout_sec" default="7.0" />
+  <arg name="radar_timeout_sec" default="9.5" />
+  <arg name="radar_bootstrap_samples" default="4" />
+  <arg name="radar_measurement_std_m" default="5.773502692" />
+  <arg name="radar_process_accel_std_mps2" default="0.20" />
+  <arg name="radar_bootstrap_huber_delta_m" default="10.0" />
+  <arg name="radar_nis_soft_threshold" default="9.21" />
+  <arg name="radar_nis_reject_threshold" default="25.0" />
+  <arg name="filter_alpha" default="0.70" />
+  <arg name="filter_beta" default="0.20" />
+  <arg name="max_radar_innovation_m" default="80.0" />
+  <arg name="max_target_speed_mps" default="7.0" />
+  <arg name="max_target_horizontal_speed_mps" default="7.0" />
+  <arg name="max_target_vertical_speed_mps" default="0.0" />
+  <arg name="terminal_camera_range_m" default="25.0" />
+  <arg name="position_gain_xy" default="0.40" />
+  <arg name="position_gain_z" default="0.35" />
+  <arg name="use_braking_speed_profile" default="true" />
+  <arg name="approach_braking_deceleration_mps2" default="2.0" />
+  <arg name="approach_braking_position_buffer_m" default="2.5" />
+  <arg name="target_velocity_feedforward_gain_xy" default="1.0" />
+  <arg name="target_velocity_feedforward_gain_z" default="0.0" />
+  <arg name="enforce_minimum_handover_altitude" default="true" />
+  <arg name="minimum_handover_altitude_m" default="3.0" />
+  <arg name="center_tolerance_u_px" default="80.0" />
+  <arg name="center_tolerance_v_px" default="80.0" />
+  <arg name="required_centered_detections" default="10" />
+  <arg name="handover_position_tolerance_m" default="5.0" />
+  <arg name="handover_yaw_tolerance_deg" default="20.0" />
+  <arg name="use_legacy_pose_handover_gate" default="true" />
+  <arg name="handover_min_estimated_range_m" default="18.0" />
+  <arg name="handover_max_estimated_range_m" default="38.0" />
+  <arg name="max_handover_velocity_std_mps" default="1.0" />
+  <arg name="max_handover_radar_age_sec" default="5.0" />
+  <arg name="max_handover_command_yaw_rate_radps" default="0.30" />
+  <arg name="max_handover_closing_speed_mps" default="2.0" />
+  <arg name="handover_blend_duration_sec" default="0.0" />
   <arg name="radar_noise_std_m" default="0.0" />
+  <arg name="radar_period_jitter_std_sec" default="0.0" />
+  <arg name="radar_delay_mean_sec" default="0.0" />
+  <arg name="radar_delay_jitter_std_sec" default="0.0" />
+  <arg name="radar_dropout_probability" default="0.0" />
+  <arg name="radar_bias_random_walk_xy_m_sqrts" default="0.0" />
+  <arg name="radar_bias_random_walk_z_m_sqrts" default="0.0" />
+  <arg name="radar_bias_limit_xy_m" default="0.0" />
+  <arg name="radar_bias_limit_z_m" default="0.0" />
   <arg name="radar_dropout_start_sec" default="-1.0" />
   <arg name="radar_dropout_duration_sec" default="0.0" />
-  <arg name="radar_acquire_duration_sec" default="6.5" />
+  <arg name="radar_acquire_duration_sec" default="9.7" />
+  <arg name="radar_acquire_timeout_sec" default="24.0" />
   <arg name="radar_seed" default="1" />
   <arg name="disturbance_model" default="none" />
   <arg name="disturbance_seed" default="20260926" />
@@ -24,15 +69,52 @@
   <arg name="target_disturbance_std_xy_mps" default="0.0" />
   <arg name="target_disturbance_std_z_mps" default="0.0" />
   <arg name="visual_disturbance_std_px" default="0.0" />
+  <arg name="visual_bias_random_walk_px_sqrts" default="0.0" />
+  <arg name="visual_bias_limit_px" default="0.0" />
+  <arg name="visual_delay_mean_sec" default="0.0" />
+  <arg name="visual_delay_jitter_std_sec" default="0.0" />
+  <arg name="visual_dropout_probability" default="0.0" />
+  <arg name="guidance_delay_mean_sec" default="0.0" />
+  <arg name="guidance_delay_jitter_std_sec" default="0.0" />
+  <arg name="guidance_dropout_probability" default="0.0" />
+  <!-- Navigation errors are injected only on the controller-observation branch.
+       PX4, MAVROS, the radar approach node, and their truth/state topics remain
+       untouched. Vector-valued node parameters also accept 3-element lists. -->
+  <arg name="nav_proxy_seed" default="20260928" />
+  <arg name="nav_pose_position_white_noise_std_m" default="0.0" />
+  <arg name="nav_pose_position_bias_random_walk_m_sqrts" default="0.0" />
+  <arg name="nav_pose_position_bias_limit_m" default="0.0" />
+  <arg name="nav_attitude_white_noise_std_deg" default="0.0" />
+  <arg name="nav_attitude_bias_random_walk_deg_sqrts" default="0.0" />
+  <arg name="nav_attitude_bias_limit_deg" default="0.0" />
+  <arg name="nav_velocity_white_noise_std_mps" default="0.0" />
+  <arg name="nav_velocity_bias_random_walk_mps_sqrts" default="0.0" />
+  <arg name="nav_velocity_bias_limit_mps" default="0.0" />
+  <arg name="nav_gyro_white_noise_std_radps" default="0.0" />
+  <arg name="nav_gyro_bias_random_walk_radps_sqrts" default="0.0" />
+  <arg name="nav_gyro_bias_limit_radps" default="0.0" />
+  <arg name="nav_accel_white_noise_std_mps2" default="0.0" />
+  <arg name="nav_accel_bias_random_walk_mps2_sqrts" default="0.0" />
+  <arg name="nav_accel_bias_limit_mps2" default="0.0" />
+  <arg name="nav_pose_delay_mean_sec" default="0.0" />
+  <arg name="nav_pose_delay_jitter_std_sec" default="0.0" />
+  <arg name="nav_pose_dropout_probability" default="0.0" />
+  <arg name="nav_velocity_delay_mean_sec" default="0.0" />
+  <arg name="nav_velocity_delay_jitter_std_sec" default="0.0" />
+  <arg name="nav_velocity_dropout_probability" default="0.0" />
+  <arg name="nav_imu_delay_mean_sec" default="0.0" />
+  <arg name="nav_imu_delay_jitter_std_sec" default="0.0" />
+  <arg name="nav_imu_dropout_probability" default="0.0" />
+  <arg name="controller_image_delay_sec" default="0.0" />
   <arg name="detection_range_m" default="30.0" />
   <arg name="fov_barrier_gain" default="0.20" />
-  <arg name="fov_barrier_max" default="3.0" />
+  <arg name="fov_barrier_max" default="4.0" />
   <arg name="fov_slowdown_start_ratio" default="0.99" />
   <arg name="fov_min_forward_speed_ratio" default="1.0" />
   <arg name="fov_emergency_yaw_ratio" default="0.85" />
   <arg name="k_z_ff" default="1.0" />
   <arg name="N_nav_z" default="2.0" />
-  <arg name="max_vz" default="1.4" />
+  <arg name="max_vz" default="2.0" />
   <arg name="k_yaw" default="1.5" />
   <arg name="k_yaw_d" default="0.3" />
   <arg name="max_yaw_rate" default="1.0" />
@@ -62,6 +144,44 @@
     </include>
   </group>
 
+  <node pkg="png_planner"
+        type="nav_measurement_proxy.py"
+        name="nav_measurement_proxy"
+        output="screen"
+        clear_params="true">
+    <param name="pose_input_topic" value="/interceptor/mavros/local_position/pose" />
+    <param name="velocity_input_topic" value="/interceptor/mavros/local_position/velocity_local" />
+    <param name="imu_input_topic" value="/interceptor/mavros/imu/data" />
+    <param name="pose_output_topic" value="/fixed_camera_sim/nav/pose" />
+    <param name="velocity_output_topic" value="/fixed_camera_sim/nav/velocity" />
+    <param name="imu_output_topic" value="/fixed_camera_sim/nav/imu" />
+    <param name="seed" value="$(arg nav_proxy_seed)" />
+    <param name="pose_position_white_noise_std_m" value="$(arg nav_pose_position_white_noise_std_m)" />
+    <param name="pose_position_bias_random_walk_m_sqrts" value="$(arg nav_pose_position_bias_random_walk_m_sqrts)" />
+    <param name="pose_position_bias_limit_m" value="$(arg nav_pose_position_bias_limit_m)" />
+    <param name="attitude_white_noise_std_deg" value="$(arg nav_attitude_white_noise_std_deg)" />
+    <param name="attitude_bias_random_walk_deg_sqrts" value="$(arg nav_attitude_bias_random_walk_deg_sqrts)" />
+    <param name="attitude_bias_limit_deg" value="$(arg nav_attitude_bias_limit_deg)" />
+    <param name="velocity_white_noise_std_mps" value="$(arg nav_velocity_white_noise_std_mps)" />
+    <param name="velocity_bias_random_walk_mps_sqrts" value="$(arg nav_velocity_bias_random_walk_mps_sqrts)" />
+    <param name="velocity_bias_limit_mps" value="$(arg nav_velocity_bias_limit_mps)" />
+    <param name="gyro_white_noise_std_radps" value="$(arg nav_gyro_white_noise_std_radps)" />
+    <param name="gyro_bias_random_walk_radps_sqrts" value="$(arg nav_gyro_bias_random_walk_radps_sqrts)" />
+    <param name="gyro_bias_limit_radps" value="$(arg nav_gyro_bias_limit_radps)" />
+    <param name="accel_white_noise_std_mps2" value="$(arg nav_accel_white_noise_std_mps2)" />
+    <param name="accel_bias_random_walk_mps2_sqrts" value="$(arg nav_accel_bias_random_walk_mps2_sqrts)" />
+    <param name="accel_bias_limit_mps2" value="$(arg nav_accel_bias_limit_mps2)" />
+    <param name="pose_delay_mean_sec" value="$(arg nav_pose_delay_mean_sec)" />
+    <param name="pose_delay_jitter_std_sec" value="$(arg nav_pose_delay_jitter_std_sec)" />
+    <param name="pose_dropout_probability" value="$(arg nav_pose_dropout_probability)" />
+    <param name="velocity_delay_mean_sec" value="$(arg nav_velocity_delay_mean_sec)" />
+    <param name="velocity_delay_jitter_std_sec" value="$(arg nav_velocity_delay_jitter_std_sec)" />
+    <param name="velocity_dropout_probability" value="$(arg nav_velocity_dropout_probability)" />
+    <param name="imu_delay_mean_sec" value="$(arg nav_imu_delay_mean_sec)" />
+    <param name="imu_delay_jitter_std_sec" value="$(arg nav_imu_delay_jitter_std_sec)" />
+    <param name="imu_dropout_probability" value="$(arg nav_imu_dropout_probability)" />
+  </node>
+
   <!-- The production visual input remains /object_kcf with kcf_msgs/Bbox. -->
   <node if="$(arg start_ibvs)"
         pkg="png_planner"
@@ -70,12 +190,16 @@
         output="screen"
         clear_params="true">
     <rosparam command="load" file="$(find png_planner)/config/fixed_camera_multisim.yaml" />
+    <param name="pose_topic" value="/fixed_camera_sim/nav/pose" />
+    <param name="attitude_topic" value="/fixed_camera_sim/nav/imu" />
+    <param name="velocity_topic" value="/fixed_camera_sim/nav/velocity" />
     <param name="command_topic" value="/fixed_camera_sim/ibvs_candidate" />
     <param name="enable_forward_speed_topic" value="true" />
     <param name="forward_speed_topic" value="/fixed_camera_ibvs/forward_speed_setpoint" />
     <param name="lost_forward_speed" value="0.0" />
     <param name="V_default" value="$(arg visual_forward_speed_mps)" />
     <param name="forward_speed_accel_limit_mps2" value="$(arg forward_speed_accel_limit_mps2)" />
+    <param name="image_delay_sec" value="$(arg controller_image_delay_sec)" />
     <param name="fov_barrier_gain" value="$(arg fov_barrier_gain)" />
     <param name="fov_barrier_max" value="$(arg fov_barrier_max)" />
     <param name="fov_slowdown_start_ratio" value="$(arg fov_slowdown_start_ratio)" />
@@ -102,11 +226,46 @@
     <rosparam command="load" file="$(find png_planner)/config/radar_approach_handover.yaml" />
     <param name="radar_input_mode" value="local_pose" />
     <param name="radar_local_topic" value="/radar/target/position" />
-    <param name="self_pose_topic" value="/interceptor/mavros/local_position/pose" />
+    <param name="self_pose_topic" value="/fixed_camera_sim/nav/pose" />
     <param name="ibvs_candidate_topic" value="/fixed_camera_sim/ibvs_candidate" />
     <param name="final_command_topic" value="/fixed_camera_sim/guidance_cmd" />
     <param name="radar_timeout_sec" value="$(arg radar_timeout_sec)" />
     <param name="expected_radar_period_sec" value="$(arg radar_period_sec)" />
+    <param name="radar_bootstrap_samples" value="$(arg radar_bootstrap_samples)" />
+    <param name="radar_measurement_std_m" value="$(arg radar_measurement_std_m)" />
+    <param name="radar_process_accel_std_mps2" value="$(arg radar_process_accel_std_mps2)" />
+    <param name="radar_bootstrap_huber_delta_m" value="$(arg radar_bootstrap_huber_delta_m)" />
+    <param name="radar_nis_soft_threshold" value="$(arg radar_nis_soft_threshold)" />
+    <param name="radar_nis_reject_threshold" value="$(arg radar_nis_reject_threshold)" />
+    <param name="filter_alpha" value="$(arg filter_alpha)" />
+    <param name="filter_beta" value="$(arg filter_beta)" />
+    <param name="max_radar_innovation_m" value="$(arg max_radar_innovation_m)" />
+    <param name="max_target_speed_mps" value="$(arg max_target_speed_mps)" />
+    <param name="max_target_horizontal_speed_mps" value="$(arg max_target_horizontal_speed_mps)" />
+    <param name="max_target_vertical_speed_mps" value="$(arg max_target_vertical_speed_mps)" />
+    <param name="terminal_camera_range_m" value="$(arg terminal_camera_range_m)" />
+    <param name="position_gain_xy" value="$(arg position_gain_xy)" />
+    <param name="position_gain_z" value="$(arg position_gain_z)" />
+    <param name="use_braking_speed_profile" value="$(arg use_braking_speed_profile)" />
+    <param name="approach_braking_deceleration_mps2" value="$(arg approach_braking_deceleration_mps2)" />
+    <param name="approach_braking_position_buffer_m" value="$(arg approach_braking_position_buffer_m)" />
+    <param name="target_velocity_feedforward_gain_xy" value="$(arg target_velocity_feedforward_gain_xy)" />
+    <param name="target_velocity_feedforward_gain_z" value="$(arg target_velocity_feedforward_gain_z)" />
+    <param name="enforce_minimum_handover_altitude" value="$(arg enforce_minimum_handover_altitude)" />
+    <param name="minimum_handover_altitude_m" value="$(arg minimum_handover_altitude_m)" />
+    <param name="center_tolerance_u_px" value="$(arg center_tolerance_u_px)" />
+    <param name="center_tolerance_v_px" value="$(arg center_tolerance_v_px)" />
+    <param name="required_centered_detections" value="$(arg required_centered_detections)" />
+    <param name="handover_position_tolerance_m" value="$(arg handover_position_tolerance_m)" />
+    <param name="handover_yaw_tolerance_deg" value="$(arg handover_yaw_tolerance_deg)" />
+    <param name="use_legacy_pose_handover_gate" value="$(arg use_legacy_pose_handover_gate)" />
+    <param name="handover_min_estimated_range_m" value="$(arg handover_min_estimated_range_m)" />
+    <param name="handover_max_estimated_range_m" value="$(arg handover_max_estimated_range_m)" />
+    <param name="max_handover_velocity_std_mps" value="$(arg max_handover_velocity_std_mps)" />
+    <param name="max_handover_radar_age_sec" value="$(arg max_handover_radar_age_sec)" />
+    <param name="max_handover_command_yaw_rate_radps" value="$(arg max_handover_command_yaw_rate_radps)" />
+    <param name="max_handover_closing_speed_mps" value="$(arg max_handover_closing_speed_mps)" />
+    <param name="handover_blend_duration_sec" value="$(arg handover_blend_duration_sec)" />
   </node>
 
   <node pkg="png_planner"
@@ -129,6 +288,7 @@
     <param name="target_climb_rate_mps" value="$(arg target_climb_rate_mps)" />
     <param name="capture_distance_m" value="$(arg capture_distance_m)" />
     <param name="chase_timeout_s" value="$(arg chase_timeout_s)" />
+    <param name="result_hold_duration_sec" value="$(arg result_hold_duration_sec)" />
     <param name="detection_range_m" value="$(arg detection_range_m)" />
     <param name="camera_mount_pitch_deg" value="-20.0" />
     <param name="fov_horizontal_limit_deg" value="26.6" />
@@ -136,10 +296,19 @@
     <param name="gate_detection_until_chase" value="$(arg gate_detection_until_chase)" />
     <param name="stop_on_handover" value="$(arg stop_on_handover)" />
     <param name="radar_period_sec" value="$(arg radar_period_sec)" />
+    <param name="radar_period_jitter_std_sec" value="$(arg radar_period_jitter_std_sec)" />
     <param name="radar_noise_std_m" value="$(arg radar_noise_std_m)" />
+    <param name="radar_delay_mean_sec" value="$(arg radar_delay_mean_sec)" />
+    <param name="radar_delay_jitter_std_sec" value="$(arg radar_delay_jitter_std_sec)" />
+    <param name="radar_dropout_probability" value="$(arg radar_dropout_probability)" />
+    <param name="radar_bias_random_walk_xy_m_sqrts" value="$(arg radar_bias_random_walk_xy_m_sqrts)" />
+    <param name="radar_bias_random_walk_z_m_sqrts" value="$(arg radar_bias_random_walk_z_m_sqrts)" />
+    <param name="radar_bias_limit_xy_m" value="$(arg radar_bias_limit_xy_m)" />
+    <param name="radar_bias_limit_z_m" value="$(arg radar_bias_limit_z_m)" />
     <param name="radar_dropout_start_sec" value="$(arg radar_dropout_start_sec)" />
     <param name="radar_dropout_duration_sec" value="$(arg radar_dropout_duration_sec)" />
     <param name="radar_acquire_duration_sec" value="$(arg radar_acquire_duration_sec)" />
+    <param name="radar_acquire_timeout_sec" value="$(arg radar_acquire_timeout_sec)" />
     <param name="radar_seed" value="$(arg radar_seed)" />
     <param name="disturbance_model" value="$(arg disturbance_model)" />
     <param name="disturbance_seed" value="$(arg disturbance_seed)" />
@@ -150,5 +319,13 @@
     <param name="target_disturbance_std_xy_mps" value="$(arg target_disturbance_std_xy_mps)" />
     <param name="target_disturbance_std_z_mps" value="$(arg target_disturbance_std_z_mps)" />
     <param name="visual_disturbance_std_px" value="$(arg visual_disturbance_std_px)" />
+    <param name="visual_bias_random_walk_px_sqrts" value="$(arg visual_bias_random_walk_px_sqrts)" />
+    <param name="visual_bias_limit_px" value="$(arg visual_bias_limit_px)" />
+    <param name="visual_delay_mean_sec" value="$(arg visual_delay_mean_sec)" />
+    <param name="visual_delay_jitter_std_sec" value="$(arg visual_delay_jitter_std_sec)" />
+    <param name="visual_dropout_probability" value="$(arg visual_dropout_probability)" />
+    <param name="guidance_delay_mean_sec" value="$(arg guidance_delay_mean_sec)" />
+    <param name="guidance_delay_jitter_std_sec" value="$(arg guidance_delay_jitter_std_sec)" />
+    <param name="guidance_dropout_probability" value="$(arg guidance_dropout_probability)" />
   </node>
 </launch>

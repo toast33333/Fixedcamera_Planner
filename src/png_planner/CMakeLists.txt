@@ -39,6 +39,46 @@ find_library(GIMBAL_CTRL_BY_PIXEL_LIBRARY
   NAMES gimbal_ctrl_by_pixel
 )
 
+# Optional INSLIB-backed state estimator.  The original PX4/MAVROS control
+# path remains available; this target is added only when the pinned INSLIB
+# submodule has been initialized.
+set(INSLIB_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/INSLIB"
+    CACHE PATH "Path to the INSLIB source tree")
+set(INSLIB_KFCORE_ROOT "${INSLIB_ROOT}/KFCore")
+if(EXISTS "${INSLIB_ROOT}/src/nav_suite.c" AND
+   EXISTS "${INSLIB_KFCORE_ROOT}/c/kalman_udu.c")
+  set(INSLIB_AVAILABLE TRUE)
+  add_library(inslib_vendor STATIC
+    ${INSLIB_ROOT}/src/ins.c
+    ${INSLIB_ROOT}/src/geodetic_toolbox.c
+    ${INSLIB_ROOT}/src/magnetic_model.c
+    ${INSLIB_ROOT}/src/ahrs.c
+    ${INSLIB_ROOT}/src/baro_alt.c
+    ${INSLIB_ROOT}/src/nav_suite.c
+    ${INSLIB_ROOT}/src/log.c
+    ${INSLIB_KFCORE_ROOT}/c/linalg.c
+    ${INSLIB_KFCORE_ROOT}/c/kalman_udu.c
+    ${INSLIB_KFCORE_ROOT}/c/miniblas.c
+  )
+  target_include_directories(inslib_vendor PUBLIC
+    ${INSLIB_ROOT}/src
+    ${INSLIB_KFCORE_ROOT}/c
+    ${INSLIB_KFCORE_ROOT}/c/navigation_tools
+  )
+  target_compile_definitions(inslib_vendor PUBLIC
+    _GNU_SOURCE
+    KALMAN_MAX_STATE_SIZE=18
+    KALMAN_MAX_NOISE_SIZE=24
+  )
+  target_compile_options(inslib_vendor PRIVATE -std=c11)
+  target_link_libraries(inslib_vendor m)
+else()
+  set(INSLIB_AVAILABLE FALSE)
+  message(WARNING
+    "INSLIB submodule is missing. Run: git submodule update --init --recursive. "
+    "The original PX4-state fixed-camera targets will still be built.")
+endif()
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -243,6 +283,7 @@ catkin_install_python(PROGRAMS
   scripts/pose_cmd_tf_broadcaster.py
   scripts/gimbal_keyboard_rpy_test.py
   scripts/px4_multisim_experiment.py
+  scripts/nav_measurement_proxy.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
@@ -311,3 +352,9 @@ target_link_libraries(fixed_camera_ibvs ${catkin_LIBRARIES})
 add_executable(radar_approach_handover src/radar_approach_handover.cpp)
 add_dependencies(radar_approach_handover ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(radar_approach_handover ${catkin_LIBRARIES} ${GEOGRAPHICLIB_LIBRARY})
+
+if(INSLIB_AVAILABLE)
+  add_executable(inslib_state_estimator src/inslib_state_estimator.cpp)
+  add_dependencies(inslib_state_estimator ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+  target_link_libraries(inslib_state_estimator inslib_vendor ${catkin_LIBRARIES})
+endif()

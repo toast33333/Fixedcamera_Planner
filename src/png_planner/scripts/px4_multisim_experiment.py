@@ -12,6 +12,8 @@ message interface.
 """
 
 import csv
+import copy
+import heapq
 import math
 import os
 import sys
@@ -35,7 +37,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
-from gauss_markov_disturbance import FirstOrderGaussMarkov
+from gauss_markov_disturbance import BoundedRandomWalk, FirstOrderGaussMarkov
 
 
 def clamp(value, low, high):
@@ -108,8 +110,24 @@ class FixedCameraMultisimExperiment:
         self.radar_topic = rospy.get_param(
             "~radar_topic", "/radar/target/position")
         self.radar_period = max(0.1, float(rospy.get_param("~radar_period_sec", 3.0)))
+        self.radar_period_jitter = max(
+            0.0, float(rospy.get_param("~radar_period_jitter_std_sec", 0.0)))
         self.radar_noise_std = max(
             0.0, float(rospy.get_param("~radar_noise_std_m", 0.0)))
+        self.radar_delay_mean = max(
+            0.0, float(rospy.get_param("~radar_delay_mean_sec", 0.0)))
+        self.radar_delay_jitter = max(
+            0.0, float(rospy.get_param("~radar_delay_jitter_std_sec", 0.0)))
+        self.radar_dropout_probability = clamp(
+            float(rospy.get_param("~radar_dropout_probability", 0.0)), 0.0, 1.0)
+        radar_bias_rw_xy = max(0.0, float(rospy.get_param(
+            "~radar_bias_random_walk_xy_m_sqrts", 0.0)))
+        radar_bias_rw_z = max(0.0, float(rospy.get_param(
+            "~radar_bias_random_walk_z_m_sqrts", radar_bias_rw_xy)))
+        radar_bias_limit_xy = max(0.0, float(rospy.get_param(
+            "~radar_bias_limit_xy_m", 0.0)))
+        radar_bias_limit_z = max(0.0, float(rospy.get_param(
+            "~radar_bias_limit_z_m", radar_bias_limit_xy)))
         self.radar_dropout_start = float(
             rospy.get_param("~radar_dropout_start_sec", -1.0))
         self.radar_dropout_duration = max(
@@ -122,8 +140,14 @@ class FixedCameraMultisimExperiment:
             float(rospy.get_param("~radar_acquire_timeout_sec", 15.0)))
         self.result_hold_duration = max(
             0.5, float(rospy.get_param("~result_hold_duration_sec", 2.0)))
-        radar_seed = int(rospy.get_param("~radar_seed", 1))
-        self.radar_rng = np.random.RandomState(radar_seed)
+        self.radar_seed = int(rospy.get_param("~radar_seed", 1))
+        self.radar_rng = np.random.RandomState(self.radar_seed)
+        self.radar_timing_rng = np.random.RandomState(
+            (self.radar_seed + 1001) % (2 ** 32))
+        self.radar_bias_process = BoundedRandomWalk(
+            [radar_bias_rw_xy, radar_bias_rw_xy, radar_bias_rw_z],
+            self.radar_seed + 1002,
+            [radar_bias_limit_xy, radar_bias_limit_xy, radar_bias_limit_z])
 
         self.disturbance_model = str(
             rospy.get_param("~disturbance_model", "none")).strip().lower()
@@ -147,6 +171,24 @@ class FixedCameraMultisimExperiment:
             "~target_disturbance_std_z_mps", 0.0)))
         visual_std_px = max(
             0.0, float(rospy.get_param("~visual_disturbance_std_px", 0.0)))
+        visual_bias_rw_px = max(0.0, float(rospy.get_param(
+            "~visual_bias_random_walk_px_sqrts", 0.0)))
+        visual_bias_limit_px = max(0.0, float(rospy.get_param(
+            "~visual_bias_limit_px", 0.0)))
+        self.visual_delay_mean = max(
+            0.0, float(rospy.get_param("~visual_delay_mean_sec", 0.0)))
+        self.visual_delay_jitter = max(
+            0.0, float(rospy.get_param("~visual_delay_jitter_std_sec", 0.0)))
+        self.visual_dropout_probability = clamp(
+            float(rospy.get_param("~visual_dropout_probability", 0.0)), 0.0, 1.0)
+        self.visual_tracking_timeout = max(
+            0.02, float(rospy.get_param("~visual_tracking_timeout_sec", 0.30)))
+        self.guidance_delay_mean = max(
+            0.0, float(rospy.get_param("~guidance_delay_mean_sec", 0.0)))
+        self.guidance_delay_jitter = max(
+            0.0, float(rospy.get_param("~guidance_delay_jitter_std_sec", 0.0)))
+        self.guidance_dropout_probability = clamp(
+            float(rospy.get_param("~guidance_dropout_probability", 0.0)), 0.0, 1.0)
         if self.disturbance_model == "none":
             interceptor_xy_std = interceptor_z_std = 0.0
             target_xy_std = target_z_std = visual_std_px = 0.0
@@ -159,9 +201,19 @@ class FixedCameraMultisimExperiment:
         self.visual_disturbance_process = FirstOrderGaussMarkov(
             [visual_std_px, visual_std_px], disturbance_tau,
             self.disturbance_seed + 2, disturbance_clip_sigma)
+        self.visual_bias_process = BoundedRandomWalk(
+            [visual_bias_rw_px, visual_bias_rw_px],
+            self.disturbance_seed + 3,
+            [visual_bias_limit_px, visual_bias_limit_px])
+        self.visual_timing_rng = np.random.RandomState(
+            (self.disturbance_seed + 1003) % (2 ** 32))
+        self.guidance_timing_rng = np.random.RandomState(
+            (self.disturbance_seed + 1004) % (2 ** 32))
         self.interceptor_disturbance = np.zeros(3, dtype=float)
         self.target_disturbance = np.zeros(3, dtype=float)
         self.visual_disturbance = np.zeros(2, dtype=float)
+        self.visual_bias = np.zeros(2, dtype=float)
+        self.radar_bias = np.zeros(3, dtype=float)
         self.last_disturbance_update = rospy.Time(0)
 
         self.model_states = None
@@ -173,12 +225,23 @@ class FixedCameraMultisimExperiment:
         self.nominal_pn_command = TwistStamped()
         self.fov_correction = TwistStamped()
         self.last_ibvs_command_time = rospy.Time(0)
+        self.guidance_queue = []
+        self.guidance_queue_sequence = 0
+        self.guidance_last_due_time = 0.0
+        self.guidance_last_delay = 0.0
+        self.guidance_dropped_count = 0
         self.radar_state = "DISABLED" if not self.radar_guidance_enabled else "WAIT_RADAR"
         self.handover_complete = False
         self.predicted_target = None
         self.handover_pose = None
         self.estimated_target_velocity = TwistStamped()
-        self.last_radar_publish_time = rospy.Time(0)
+        self.last_radar_capture_time = rospy.Time(0)
+        self.next_radar_capture_time = rospy.Time(0)
+        self.radar_queue = []
+        self.radar_queue_sequence = 0
+        self.radar_last_delay = 0.0
+        self.radar_last_measurement_error = 0.0
+        self.radar_dropped_count = 0
         self.radar_sample_count = 0
         self.motion_started = rospy.Time(0)
 
@@ -195,6 +258,13 @@ class FixedCameraMultisimExperiment:
         self.distance = float("nan")
         self.horizontal_distance = float("nan")
         self.frame_count = 0
+        self.visual_queue = []
+        self.visual_queue_sequence = 0
+        self.visual_last_due_time = 0.0
+        self.visual_last_delay = 0.0
+        self.visual_dropped_count = 0
+        self.last_visual_delivery_time = rospy.Time(0)
+        self.last_visual_visible = False
 
         os.makedirs(self.results_dir, exist_ok=True)
         self.csv_path = os.path.join(self.results_dir, "experiment.csv")
@@ -218,7 +288,12 @@ class FixedCameraMultisimExperiment:
             "interceptor_disturbance_vx", "interceptor_disturbance_vy",
             "interceptor_disturbance_vz", "target_disturbance_vx",
             "target_disturbance_vy", "target_disturbance_vz",
-            "visual_disturbance_u_px", "visual_disturbance_v_px"
+            "visual_disturbance_u_px", "visual_disturbance_v_px",
+            "radar_bias_x_m", "radar_bias_y_m", "radar_bias_z_m",
+            "radar_measurement_error_m", "radar_delay_s",
+            "radar_dropped_count", "visual_bias_u_px", "visual_bias_v_px",
+            "visual_delay_s", "visual_dropped_count",
+            "guidance_delay_s", "guidance_dropped_count"
         ])
 
         self.interceptor_cmd_pub = rospy.Publisher(
@@ -242,6 +317,12 @@ class FixedCameraMultisimExperiment:
             TwistStamped, queue_size=10)
         self.visual_disturbance_pub = rospy.Publisher(
             "/fixed_camera_sim/visual_disturbance", Vector3Stamped, queue_size=10)
+        self.radar_bias_pub = rospy.Publisher(
+            "/fixed_camera_sim/radar_bias", Vector3Stamped, queue_size=10)
+        self.visual_bias_pub = rospy.Publisher(
+            "/fixed_camera_sim/visual_bias", Vector3Stamped, queue_size=10)
+        self.delay_state_pub = rospy.Publisher(
+            "/fixed_camera_sim/delay_state", Vector3Stamped, queue_size=10)
 
         rospy.Subscriber("/gazebo/model_states", ModelStates, self.model_states_cb, queue_size=1)
         rospy.Subscriber(self.interceptor_ns + "/state", State, self.interceptor_state_cb, queue_size=5)
@@ -280,8 +361,14 @@ class FixedCameraMultisimExperiment:
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.control_rate), self.control_tick)
         rospy.on_shutdown(self.shutdown)
         rospy.loginfo(
-            "[FixedCameraSim] Experiment manager started; disturbance=%s seed=%d; results: %s",
-            self.disturbance_model, self.disturbance_seed, self.results_dir)
+            "[FixedCameraSim] Experiment manager started; disturbance=%s seed=%d; "
+            "radar delay=%.3f+/-%.3f s, visual delay=%.3f+/-%.3f s, "
+            "guidance delay=%.3f+/-%.3f s; results: %s",
+            self.disturbance_model, self.disturbance_seed,
+            self.radar_delay_mean, self.radar_delay_jitter,
+            self.visual_delay_mean, self.visual_delay_jitter,
+            self.guidance_delay_mean, self.guidance_delay_jitter,
+            self.results_dir)
 
     def model_states_cb(self, message):
         with self.lock:
@@ -300,8 +387,27 @@ class FixedCameraMultisimExperiment:
         self.target_pose = message
 
     def ibvs_command_cb(self, message):
-        self.ibvs_command = message
-        self.last_ibvs_command_time = rospy.Time.now()
+        now = rospy.Time.now()
+        if self.guidance_timing_rng.uniform() < self.guidance_dropout_probability:
+            self.guidance_dropped_count += 1
+            return
+        if self.guidance_delay_mean <= 0.0 and self.guidance_delay_jitter <= 0.0:
+            self.ibvs_command = copy.deepcopy(message)
+            self.last_ibvs_command_time = now
+            self.guidance_last_delay = 0.0
+            return
+        delay = self.sample_nonnegative_delay(
+            self.guidance_delay_mean, self.guidance_delay_jitter,
+            self.guidance_timing_rng)
+        due_time = max(
+            now.to_sec() + delay,
+            self.guidance_last_due_time + 1.0e-6)
+        self.guidance_last_due_time = due_time
+        self.guidance_queue_sequence += 1
+        heapq.heappush(
+            self.guidance_queue,
+            (due_time, self.guidance_queue_sequence, now.to_sec(),
+             copy.deepcopy(message)))
 
     def nominal_pn_command_cb(self, message):
         self.nominal_pn_command = message
@@ -332,6 +438,11 @@ class FixedCameraMultisimExperiment:
         self.phase_started = rospy.Time.now()
         if phase == "RADAR_ACQUIRE":
             self.motion_started = self.phase_started
+            self.radar_bias_process.reset()
+            self.radar_bias.fill(0.0)
+            self.last_radar_capture_time = rospy.Time(0)
+            self.next_radar_capture_time = self.phase_started
+            self.radar_queue = []
         if phase == "CHASE":
             self.chase_started = self.phase_started
             if self.motion_started == rospy.Time(0):
@@ -339,10 +450,35 @@ class FixedCameraMultisimExperiment:
             self.interceptor_disturbance_process.reset()
             self.target_disturbance_process.reset()
             self.visual_disturbance_process.reset()
+            self.visual_bias_process.reset()
             self.interceptor_disturbance.fill(0.0)
             self.target_disturbance.fill(0.0)
             self.visual_disturbance.fill(0.0)
+            self.visual_bias.fill(0.0)
             self.last_disturbance_update = self.phase_started
+            self.visual_queue = []
+            self.last_visual_delivery_time = rospy.Time(0)
+            self.last_visual_visible = False
+
+    @staticmethod
+    def sample_nonnegative_delay(mean, standard_deviation, rng):
+        if standard_deviation <= 0.0:
+            return max(0.0, mean)
+        # Three-sigma clipping keeps a declared "mild" timing model bounded
+        # while preserving deterministic jitter for A/B comparisons.
+        sample = rng.normal(mean, standard_deviation)
+        return clamp(sample, 0.0, mean + 3.0 * standard_deviation)
+
+    def update_guidance_delivery(self, now):
+        latest = None
+        while self.guidance_queue and self.guidance_queue[0][0] <= now.to_sec():
+            latest = heapq.heappop(self.guidance_queue)
+        if latest is None:
+            return
+        _, _, received_time, message = latest
+        self.ibvs_command = message
+        self.last_ibvs_command_time = now
+        self.guidance_last_delay = max(0.0, now.to_sec() - received_time)
 
     def get_models(self):
         with self.lock:
@@ -367,10 +503,11 @@ class FixedCameraMultisimExperiment:
         return command
 
     def update_disturbance(self, now):
-        if self.disturbance_model != "gauss_markov" or self.phase != "CHASE":
+        if self.phase != "CHASE":
             self.interceptor_disturbance.fill(0.0)
             self.target_disturbance.fill(0.0)
             self.visual_disturbance.fill(0.0)
+            self.visual_bias.fill(0.0)
             self.last_disturbance_update = now
             return
         if self.last_disturbance_update == rospy.Time(0):
@@ -378,9 +515,15 @@ class FixedCameraMultisimExperiment:
             return
         dt = clamp((now - self.last_disturbance_update).to_sec(), 0.0, 0.25)
         self.last_disturbance_update = now
-        self.interceptor_disturbance = self.interceptor_disturbance_process.step(dt)
-        self.target_disturbance = self.target_disturbance_process.step(dt)
-        self.visual_disturbance = self.visual_disturbance_process.step(dt)
+        if self.disturbance_model == "gauss_markov":
+            self.interceptor_disturbance = self.interceptor_disturbance_process.step(dt)
+            self.target_disturbance = self.target_disturbance_process.step(dt)
+            self.visual_disturbance = self.visual_disturbance_process.step(dt)
+        else:
+            self.interceptor_disturbance.fill(0.0)
+            self.target_disturbance.fill(0.0)
+            self.visual_disturbance.fill(0.0)
+        self.visual_bias = self.visual_bias_process.step(dt)
 
     def add_velocity_disturbance(self, command, disturbance):
         return self.make_command(
@@ -412,6 +555,29 @@ class FixedCameraMultisimExperiment:
         visual.vector.y = float(self.visual_disturbance[1])
         self.visual_disturbance_pub.publish(visual)
 
+        radar_bias = Vector3Stamped()
+        radar_bias.header.stamp = now
+        radar_bias.header.frame_id = "map"
+        radar_bias.vector.x = float(self.radar_bias[0])
+        radar_bias.vector.y = float(self.radar_bias[1])
+        radar_bias.vector.z = float(self.radar_bias[2])
+        self.radar_bias_pub.publish(radar_bias)
+
+        visual_bias = Vector3Stamped()
+        visual_bias.header.stamp = now
+        visual_bias.header.frame_id = "camera_optical"
+        visual_bias.vector.x = float(self.visual_bias[0])
+        visual_bias.vector.y = float(self.visual_bias[1])
+        self.visual_bias_pub.publish(visual_bias)
+
+        delays = Vector3Stamped()
+        delays.header.stamp = now
+        delays.header.frame_id = "radar_visual_guidance"
+        delays.vector.x = self.radar_last_delay
+        delays.vector.y = self.visual_last_delay
+        delays.vector.z = self.guidance_last_delay
+        self.delay_state_pub.publish(delays)
+
     def altitude_command(self, pose, desired_altitude, vx=0.0):
         current = pose.pose.position.z if pose is not None else 0.0
         vz = clamp(0.9 * (desired_altitude - current), -1.3, 1.3)
@@ -439,27 +605,56 @@ class FixedCameraMultisimExperiment:
         return (self.radar_dropout_start <= elapsed <
                 self.radar_dropout_start + self.radar_dropout_duration)
 
-    def maybe_publish_radar(self, target_pose, now):
+    def maybe_capture_radar(self, target_pose, now):
         if not self.radar_guidance_enabled or self.phase not in (
                 "RADAR_ACQUIRE", "CHASE", "SUCCESS_HOLD", "TIMEOUT_HOLD"):
             return
         if self.radar_dropout_active(now):
             return
-        if (self.last_radar_publish_time != rospy.Time(0) and
-                (now - self.last_radar_publish_time).to_sec() < self.radar_period):
+        if (self.next_radar_capture_time != rospy.Time(0) and
+                now < self.next_radar_capture_time):
+            return
+
+        period = self.radar_period
+        if self.radar_period_jitter > 0.0:
+            period += self.radar_timing_rng.normal(0.0, self.radar_period_jitter)
+        period = max(0.1, period)
+        self.next_radar_capture_time = now + rospy.Duration(period)
+        bias_dt = (
+            (now - self.last_radar_capture_time).to_sec()
+            if self.last_radar_capture_time != rospy.Time(0) else 0.0)
+        self.radar_bias = self.radar_bias_process.step(bias_dt)
+        self.last_radar_capture_time = now
+        if self.radar_timing_rng.uniform() < self.radar_dropout_probability:
+            self.radar_dropped_count += 1
             return
 
         message = PoseStamped()
         message.header.stamp = now
         message.header.frame_id = "map"
         noise = self.radar_rng.normal(0.0, self.radar_noise_std, size=3)
-        message.pose.position.x = target_pose.position.x + float(noise[0])
-        message.pose.position.y = target_pose.position.y + float(noise[1])
-        message.pose.position.z = target_pose.position.z + float(noise[2])
+        measurement_error = noise + self.radar_bias
+        message.pose.position.x = target_pose.position.x + float(measurement_error[0])
+        message.pose.position.y = target_pose.position.y + float(measurement_error[1])
+        message.pose.position.z = target_pose.position.z + float(measurement_error[2])
         message.pose.orientation.w = 1.0
-        self.radar_pub.publish(message)
-        self.last_radar_publish_time = now
-        self.radar_sample_count += 1
+        delay = self.sample_nonnegative_delay(
+            self.radar_delay_mean, self.radar_delay_jitter,
+            self.radar_timing_rng)
+        self.radar_queue_sequence += 1
+        heapq.heappush(
+            self.radar_queue,
+            (now.to_sec() + delay, self.radar_queue_sequence,
+             now.to_sec(), float(np.linalg.norm(measurement_error)), message))
+
+    def publish_due_radar(self, now):
+        while self.radar_queue and self.radar_queue[0][0] <= now.to_sec():
+            _, _, capture_time, measurement_error, message = heapq.heappop(
+                self.radar_queue)
+            self.radar_pub.publish(message)
+            self.radar_last_delay = max(0.0, now.to_sec() - capture_time)
+            self.radar_last_measurement_error = measurement_error
+            self.radar_sample_count += 1
 
     def request_offboard_and_arm(self):
         now = rospy.Time.now()
@@ -514,16 +709,48 @@ class FixedCameraMultisimExperiment:
         return distance, horizontal_distance, visible, u_offset, v_offset, horizontal_ratio, vertical_ratio
 
     def apply_visual_disturbance(self, projection):
-        if self.disturbance_model != "gauss_markov" or self.phase != "CHASE":
+        if self.phase != "CHASE":
             return projection
         distance, horizontal_distance, visible, u_offset, v_offset, h_ratio, v_ratio = projection
         if not visible or not (math.isfinite(u_offset) and math.isfinite(v_offset)):
             return projection
+        u_offset += float(self.visual_disturbance[0] + self.visual_bias[0])
+        v_offset += float(self.visual_disturbance[1] + self.visual_bias[1])
+        measured_h_ratio = abs(math.degrees(math.atan2(u_offset, self.fx))) / self.horizontal_limit_deg
+        measured_v_ratio = abs(math.degrees(math.atan2(v_offset, self.fy))) / self.vertical_limit_deg
+        visible = visible and measured_h_ratio <= 1.0 and measured_v_ratio <= 1.0
         return (
             distance, horizontal_distance, visible,
-            u_offset + float(self.visual_disturbance[0]),
-            v_offset + float(self.visual_disturbance[1]),
-            h_ratio, v_ratio)
+            u_offset, v_offset, measured_h_ratio, measured_v_ratio)
+
+    def enqueue_visual_measurement(self, projection, now):
+        if self.visual_timing_rng.uniform() < self.visual_dropout_probability:
+            self.visual_dropped_count += 1
+            return
+        delay = self.sample_nonnegative_delay(
+            self.visual_delay_mean, self.visual_delay_jitter,
+            self.visual_timing_rng)
+        due_time = max(
+            now.to_sec() + delay,
+            self.visual_last_due_time + 1.0e-6)
+        self.visual_last_due_time = due_time
+        self.visual_queue_sequence += 1
+        heapq.heappush(
+            self.visual_queue,
+            (due_time, self.visual_queue_sequence, now.to_sec(), projection))
+
+    def publish_due_visual_measurement(self, now):
+        latest = None
+        while self.visual_queue and self.visual_queue[0][0] <= now.to_sec():
+            latest = heapq.heappop(self.visual_queue)
+        if latest is not None:
+            _, _, capture_time, projection = latest
+            self.visual_last_delay = max(0.0, now.to_sec() - capture_time)
+            self.publish_detection_and_image(projection, now)
+        if self.last_visual_delivery_time == rospy.Time(0):
+            self.tracking = False
+        elif (now - self.last_visual_delivery_time).to_sec() > self.visual_tracking_timeout:
+            self.tracking = False
 
     def detection_enabled_for_control(self, now):
         if not self.gate_detection_until_chase:
@@ -539,13 +766,11 @@ class FixedCameraMultisimExperiment:
     def publish_detection_and_image(self, projection, now):
         distance, horizontal_distance, raw_visible, u_offset, v_offset, h_ratio, v_ratio = projection
         visible = raw_visible and self.detection_enabled_for_control(now)
-        self.distance = distance
-        self.horizontal_distance = horizontal_distance
         self.tracking = visible
+        self.last_visual_visible = visible
+        self.last_visual_delivery_time = now
         self.pixel_u = u_offset
         self.pixel_v = v_offset
-        self.horizontal_ratio = h_ratio
-        self.vertical_ratio = v_ratio
 
         box = Bbox()
         if visible:
@@ -667,18 +892,30 @@ class FixedCameraMultisimExperiment:
         models = self.get_models()
         now = rospy.Time.now()
         self.update_disturbance(now)
+        self.update_guidance_delivery(now)
         interceptor_command = self.make_command()
         target_command = self.make_command()
 
         if models is not None:
             interceptor_model_pose, _, target_model_pose, _ = models
-            projection = self.project_target(interceptor_model_pose, target_model_pose)
-            projection = self.apply_visual_disturbance(projection)
-            self.publish_detection_and_image(projection, now)
+            truth_projection = self.project_target(
+                interceptor_model_pose, target_model_pose)
+            self.distance = truth_projection[0]
+            self.horizontal_distance = truth_projection[1]
+            self.horizontal_ratio = truth_projection[5]
+            self.vertical_ratio = truth_projection[6]
+            sensor_projection = self.apply_visual_disturbance(truth_projection)
+            self.enqueue_visual_measurement(sensor_projection, now)
+            self.publish_due_visual_measurement(now)
             self.publish_visualization(interceptor_model_pose, target_model_pose)
-            self.distance_pub.publish(Float32(data=projection[0]))
-            self.fov_ratio_pub.publish(Float32(data=max(projection[5], projection[6])))
-            self.maybe_publish_radar(target_model_pose, now)
+            self.distance_pub.publish(Float32(data=self.distance))
+            self.fov_ratio_pub.publish(Float32(data=max(
+                self.horizontal_ratio, self.vertical_ratio)))
+            self.maybe_capture_radar(target_model_pose, now)
+            self.publish_due_radar(now)
+        else:
+            self.publish_due_visual_measurement(now)
+            self.publish_due_radar(now)
 
         if self.phase == "WAITING_FOR_LINKS":
             if self.links_ready(models):
@@ -770,11 +1007,14 @@ class FixedCameraMultisimExperiment:
         status = ("phase=%s | distance=%.2f m | horizontal=%.2f m | target_visible=%s | "
                   "pixel=(%.1f, %.1f) | fov_ratio=(%.2f, %.2f) | "
                   "guidance=%s | handover=%s | radar_samples=%d | disturbance=%s | "
+                  "delay_r/v/c=(%.3f/%.3f/%.3f)s | "
                   "interceptor=%s/%s | target=%s/%s" %
                   (self.phase, self.distance, self.horizontal_distance, self.tracking,
                    self.pixel_u, self.pixel_v, self.horizontal_ratio, self.vertical_ratio,
                    self.radar_state, self.handover_complete, self.radar_sample_count,
                    self.disturbance_model,
+                   self.radar_last_delay, self.visual_last_delay,
+                   self.guidance_last_delay,
                    self.interceptor_state.mode, self.interceptor_state.armed,
                    self.target_state.mode, self.target_state.armed))
         self.status_pub.publish(String(data=status))
@@ -829,6 +1069,18 @@ class FixedCameraMultisimExperiment:
             "%.6f" % self.target_disturbance[2],
             "%.6f" % self.visual_disturbance[0],
             "%.6f" % self.visual_disturbance[1],
+            "%.6f" % self.radar_bias[0],
+            "%.6f" % self.radar_bias[1],
+            "%.6f" % self.radar_bias[2],
+            "%.6f" % self.radar_last_measurement_error,
+            "%.6f" % self.radar_last_delay,
+            self.radar_dropped_count,
+            "%.6f" % self.visual_bias[0],
+            "%.6f" % self.visual_bias[1],
+            "%.6f" % self.visual_last_delay,
+            self.visual_dropped_count,
+            "%.6f" % self.guidance_last_delay,
+            self.guidance_dropped_count,
         ])
         if self.frame_count % 20 == 0:
             self.csv_file.flush()

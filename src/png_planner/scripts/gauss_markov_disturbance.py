@@ -53,3 +53,47 @@ class FirstOrderGaussMarkov:
             limit = self.clip_sigma * self.standard_deviation
             self._state = np.maximum(-limit, np.minimum(self._state, limit))
         return self._state.copy()
+
+
+class BoundedRandomWalk:
+    """Generate a reproducible cumulative bias with an absolute safety bound.
+
+    ``walk_density`` has units of output-units / sqrt(second).  The exact
+    discrete increment is ``density * sqrt(dt) * N(0, 1)``.  Unlike the
+    Gauss-Markov process above, this process does not decay toward zero, so it
+    represents a slowly accumulating sensor bias.  ``absolute_limit`` is a
+    simulation guard, not a stochastic restoring force.
+    """
+
+    def __init__(self, walk_density, seed, absolute_limit):
+        self.walk_density = np.maximum(
+            0.0, np.asarray(walk_density, dtype=float))
+        self.absolute_limit = np.maximum(
+            0.0, np.asarray(absolute_limit, dtype=float))
+        if self.walk_density.ndim != 1:
+            raise ValueError("walk_density must be a one-dimensional vector")
+        if self.absolute_limit.shape != self.walk_density.shape:
+            raise ValueError(
+                "absolute_limit must have the same shape as walk_density")
+        self.seed = int(seed) % (2 ** 32)
+        self._rng = np.random.RandomState(self.seed)
+        self._state = np.zeros_like(self.walk_density)
+
+    @property
+    def enabled(self):
+        return bool(np.any(self.walk_density > 0.0))
+
+    def reset(self):
+        self._state.fill(0.0)
+
+    def step(self, dt_s):
+        dt_s = max(float(dt_s), 0.0)
+        if dt_s <= 0.0 or not self.enabled:
+            return self._state.copy()
+        self._state += (
+            self.walk_density * math.sqrt(dt_s) *
+            self._rng.normal(0.0, 1.0, size=self._state.shape))
+        self._state = np.maximum(
+            -self.absolute_limit,
+            np.minimum(self._state, self.absolute_limit))
+        return self._state.copy()

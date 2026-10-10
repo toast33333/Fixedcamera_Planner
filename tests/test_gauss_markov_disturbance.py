@@ -13,6 +13,7 @@ SPEC = importlib.util.spec_from_file_location("gauss_markov_disturbance", MODULE
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 FirstOrderGaussMarkov = MODULE.FirstOrderGaussMarkov
+BoundedRandomWalk = MODULE.BoundedRandomWalk
 
 
 class FirstOrderGaussMarkovTest(unittest.TestCase):
@@ -41,6 +42,27 @@ class FirstOrderGaussMarkovTest(unittest.TestCase):
         self.assertAlmostEqual(float(np.mean(settled)), 0.0, delta=0.04)
         self.assertAlmostEqual(float(np.std(settled)), 0.30, delta=0.05)
         self.assertLessEqual(float(np.max(np.abs(settled))), 0.90 + 1.0e-12)
+
+
+class BoundedRandomWalkTest(unittest.TestCase):
+    def test_same_seed_is_reproducible_and_reset_clears_state(self):
+        left = BoundedRandomWalk([0.04, 0.08], 31, [0.5, 0.8])
+        right = BoundedRandomWalk([0.04, 0.08], 31, [0.5, 0.8])
+        for _ in range(200):
+            np.testing.assert_array_equal(left.step(0.05), right.step(0.05))
+        left.reset()
+        np.testing.assert_array_equal(left.step(0.0), np.zeros(2))
+
+    def test_zero_density_stays_disabled(self):
+        process = BoundedRandomWalk([0.0, 0.0], 1, [1.0, 1.0])
+        self.assertFalse(process.enabled)
+        np.testing.assert_array_equal(process.step(10.0), np.zeros(2))
+
+    def test_walk_is_cumulative_and_clipped(self):
+        process = BoundedRandomWalk([2.0], 7, [0.3])
+        samples = np.asarray([float(process.step(0.1)[0]) for _ in range(500)])
+        self.assertGreater(float(np.std(samples)), 0.05)
+        self.assertLessEqual(float(np.max(np.abs(samples))), 0.3 + 1.0e-12)
 
 
 if __name__ == "__main__":

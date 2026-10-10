@@ -1,0 +1,30 @@
+<launch>
+  <arg name="inslib_config" default="$(find png_planner)/config/inslib_fixed_camera.yaml" />
+  <arg name="ibvs_config" default="$(find png_planner)/config/fixed_camera_ibvs.yaml" />
+  <arg name="detection_mode" default="0" />
+  <arg name="detection_topic" default="/object_kcf" />
+
+  <!-- Alternate estimator. The original fixed_camera_ibvs.launch remains
+       unchanged and continues to use PX4/MAVROS state. -->
+  <node pkg="png_planner"
+        type="inslib_state_estimator"
+        name="inslib_state_estimator"
+        output="screen">
+    <rosparam command="load" file="$(arg inslib_config)" />
+  </node>
+
+  <node pkg="png_planner"
+        type="fixed_camera_ibvs"
+        name="fixed_camera_ibvs"
+        output="screen">
+    <rosparam command="load" file="$(arg ibvs_config)" />
+    <param name="detection_mode" value="$(arg detection_mode)" />
+    <param name="detection_topic" value="$(arg detection_topic)" />
+    <param name="pose_topic" value="/inslib/local_position/pose" />
+    <param name="attitude_topic" value="/inslib/imu/data" />
+    <param name="velocity_topic" value="/inslib/local_position/velocity_local" />
+    <param name="use_pose_orientation" value="false" />
+    <param name="enable_state_valid_topic" value="true" />
+    <param name="state_valid_topic" value="/inslib/state_valid" />
+  </node>
+</launch>

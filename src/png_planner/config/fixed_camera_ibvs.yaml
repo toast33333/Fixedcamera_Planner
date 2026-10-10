@@ -48,7 +48,7 @@ yaw_enable_speed_ratio: 0.1
 enable_height_control: true
 k_z_ff: 1.0
 N_nav_z: 2.0
-max_vz: 1.6
+max_vz: 2.0
 vertical_integrator_decay: 0.98
 
 # The measured physical half-FOV is horizontal +/-26.6 deg and vertical
@@ -57,7 +57,7 @@ vertical_integrator_decay: 0.98
 fov_horizontal_limit_deg: 23.94
 fov_vertical_limit_deg: 18.54
 fov_barrier_gain: 0.20
-fov_barrier_max: 3.0
+fov_barrier_max: 4.0
 # Keep PN closing speed unchanged.  The FOV term corrects LOS/yaw and vertical
 # motion but does not slow the interceptor, which avoids delaying interception.
 fov_slowdown_start_ratio: 0.99
@@ -66,6 +66,16 @@ fov_emergency_yaw_ratio: 0.85
 
 # Attitude and image-delay compensation
 enable_attitude_compensation: true
+# Original PX4 launch may accept pose orientation as a redundant source. The
+# INSLIB launch overrides this to false so one timestamped attitude stream owns
+# the interpolation history.
+use_pose_orientation: true
+# Optional estimator-health gate. The original PX4-state launch keeps this
+# disabled; the INSLIB launch overrides it to true and stops on stale/invalid
+# navigation state instead of continuing with an old attitude.
+enable_state_valid_topic: false
+state_valid_topic: /inslib/state_valid
+state_valid_timeout_sec: 0.15
 image_delay_sec: 0.08
 max_los_prediction_sec: 0.25
 pose_history_sec: 1.0
