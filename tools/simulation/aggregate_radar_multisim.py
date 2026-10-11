@@ -34,6 +34,7 @@ SUMMARY_FIELDS = [
     "max_radar_innovation_m", "max_target_speed_mps",
     "max_target_horizontal_speed_mps", "max_target_vertical_speed_mps",
     "radar_measurement_std_m", "radar_process_accel_std_mps2",
+    "max_handover_opening_speed_mps",
 ]
 
 
@@ -43,6 +44,7 @@ RADAR_CONFIG_FIELDS = {
     "max_radar_innovation_m", "max_target_speed_mps",
     "max_target_horizontal_speed_mps", "max_target_vertical_speed_mps",
     "radar_measurement_std_m", "radar_process_accel_std_mps2",
+    "max_handover_opening_speed_mps",
 }
 
 

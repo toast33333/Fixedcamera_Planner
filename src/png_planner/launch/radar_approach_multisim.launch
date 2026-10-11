@@ -45,6 +45,7 @@
   <arg name="max_handover_radar_age_sec" default="5.0" />
   <arg name="max_handover_command_yaw_rate_radps" default="0.30" />
   <arg name="max_handover_closing_speed_mps" default="2.0" />
+  <arg name="max_handover_opening_speed_mps" default="0.5" />
   <arg name="handover_blend_duration_sec" default="0.0" />
   <arg name="radar_noise_std_m" default="0.0" />
   <arg name="radar_period_jitter_std_sec" default="0.0" />
@@ -265,6 +266,7 @@
     <param name="max_handover_radar_age_sec" value="$(arg max_handover_radar_age_sec)" />
     <param name="max_handover_command_yaw_rate_radps" value="$(arg max_handover_command_yaw_rate_radps)" />
     <param name="max_handover_closing_speed_mps" value="$(arg max_handover_closing_speed_mps)" />
+    <param name="max_handover_opening_speed_mps" value="$(arg max_handover_opening_speed_mps)" />
     <param name="handover_blend_duration_sec" value="$(arg handover_blend_duration_sec)" />
   </node>
 

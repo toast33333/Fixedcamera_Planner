@@ -109,6 +109,11 @@ max_handover_velocity_std_mps: 1.0
 max_handover_radar_age_sec: 5.0
 max_handover_command_yaw_rate_radps: 0.30
 max_handover_closing_speed_mps: 2.0
+# Positive closing speed means the interceptor is reducing horizontal
+# separation. Do not transfer control while it is falling behind faster than
+# this value; otherwise the 2 s command blend can carry the target out of the
+# visual detection range immediately after handover.
+max_handover_opening_speed_mps: 0.5
 ibvs_candidate_timeout_sec: 0.20
 # Smooth the one-way command-ownership transfer.  After handover the original
 # fixed-camera/PN controller semantics are left unchanged.

@@ -106,6 +106,12 @@ def braking_speed_limit(position_error, deceleration, buffer_distance,
                math.sqrt(2.0 * deceleration * braking_distance))
 
 
+def handover_relative_speed_stable(closing_speed, maximum_closing_speed,
+                                   maximum_opening_speed):
+    return (-maximum_opening_speed <= closing_speed
+            <= maximum_closing_speed)
+
+
 class RadarApproachMathTest(unittest.TestCase):
     def test_twenty_meter_terminal_geometry_centers_upward_camera(self):
         target = (100.0, 20.0, 30.0)
@@ -216,6 +222,12 @@ class RadarApproachMathTest(unittest.TestCase):
         self.assertAlmostEqual(
             braking_speed_limit(6.5, 2.0, 2.5, 8.0), 4.0)
         self.assertEqual(braking_speed_limit(40.0, 2.0, 2.5, 8.0), 8.0)
+
+    def test_handover_rejects_fast_opening_and_fast_closing(self):
+        self.assertFalse(handover_relative_speed_stable(-2.35, 2.0, 0.5))
+        self.assertTrue(handover_relative_speed_stable(-0.50, 2.0, 0.5))
+        self.assertTrue(handover_relative_speed_stable(0.75, 2.0, 0.5))
+        self.assertFalse(handover_relative_speed_stable(2.05, 2.0, 0.5))
 
     def test_twenty_five_meter_terminal_geometry_preserves_slant_range(self):
         target = (80.0, -12.0, 9.0)

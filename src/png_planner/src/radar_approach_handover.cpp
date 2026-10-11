@@ -210,6 +210,8 @@ private:
                  max_handover_command_yaw_rate_radps_, 0.30);
         nh.param("max_handover_closing_speed_mps",
                  max_handover_closing_speed_mps_, 2.0);
+        nh.param("max_handover_opening_speed_mps",
+                 max_handover_opening_speed_mps_, 0.5);
         double handover_yaw_tolerance_deg = 10.0;
         nh.param("handover_yaw_tolerance_deg",
                  handover_yaw_tolerance_deg, 10.0);
@@ -283,6 +285,8 @@ private:
             std::max(max_handover_command_yaw_rate_radps_, 0.0);
         max_handover_closing_speed_mps_ =
             std::max(max_handover_closing_speed_mps_, 0.0);
+        max_handover_opening_speed_mps_ =
+            std::max(max_handover_opening_speed_mps_, 0.0);
         handover_blend_duration_sec_ =
             std::max(handover_blend_duration_sec_, 0.0);
         required_centered_detections_ = std::max(required_centered_detections_, 1);
@@ -1180,7 +1184,8 @@ private:
             const bool command_stable =
                 std::abs(approach_command.twist.angular.z) <=
                     max_handover_command_yaw_rate_radps_ &&
-                closing_speed <= max_handover_closing_speed_mps_;
+                closing_speed <= max_handover_closing_speed_mps_ &&
+                closing_speed >= -max_handover_opening_speed_mps_;
 
             if (visual_ready && ibvs_candidate_fresh && radar_healthy &&
                 range_safe && pose_gate_satisfied && command_stable) {
@@ -1194,10 +1199,13 @@ private:
                 ROS_INFO("[RadarApproach] Handover: estimated range %.2f m, "
                          "pose error %.2f m, yaw error %.1f deg, "
                          "velocity sigma %.2f m/s, radar age %.2f s, "
-                         "closing speed %.2f m/s, centered detections %d.",
+                         "closing speed %.2f m/s (window %.2f to %.2f), "
+                         "centered detections %d.",
                          target_range,
                          position_error, yaw_error * 180.0 / kPi,
                          velocity_std, radar_age, closing_speed,
+                         -max_handover_opening_speed_mps_,
+                         max_handover_closing_speed_mps_,
                          centered_detection_count_);
             } else {
                 publishHandoverFlag(false);
@@ -1304,6 +1312,7 @@ private:
     double max_handover_radar_age_sec_ = 5.0;
     double max_handover_command_yaw_rate_radps_ = 0.30;
     double max_handover_closing_speed_mps_ = 2.0;
+    double max_handover_opening_speed_mps_ = 0.5;
     double ibvs_candidate_timeout_sec_ = 0.20;
     double handover_blend_duration_sec_ = 0.0;
     double control_rate_hz_ = 20.0;
