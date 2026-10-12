@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import csv
+import json
 import math
 import os
 import statistics
@@ -18,6 +19,17 @@ def main():
         raise SystemExit("usage: analyze_multisim_result.py RUN_DIRECTORY")
     run_dir = os.path.abspath(os.path.expanduser(sys.argv[1]))
     csv_path = os.path.join(run_dir, "experiment.csv")
+    params_path = os.path.join(run_dir, "case_params.json")
+    params = {}
+    try:
+        with open(params_path, encoding="utf-8") as stream:
+            params = json.load(stream)
+    except (OSError, ValueError):
+        pass
+    target_speed_mps = float(params.get("target_speed_mps", 2.0))
+    visual_forward_speed_mps = float(
+        params.get("visual_forward_speed_mps", 4.5))
+    capture_distance_m = float(params.get("capture_distance_m", 5.0))
     with open(csv_path, newline="") as stream:
         rows = list(csv.DictReader(stream))
     chase = [row for row in rows if row["phase"] in ("CHASE", "SUCCESS_HOLD")]
@@ -45,8 +57,9 @@ def main():
         "tracking availability during chase: %.1f %%" %
         (100.0 * statistics.mean(tracking_values)),
         "maximum normalized FOV usage: %.3f" % max(fov_ratios),
-        "target commanded speed: 2.0 m/s",
-        "interceptor nominal IBVS forward speed: 4.5 m/s",
+        "target commanded speed: %.1f m/s" % target_speed_mps,
+        "interceptor nominal IBVS forward speed: %.1f m/s" %
+        visual_forward_speed_mps,
     ]
     summary_path = os.path.join(run_dir, "summary.txt")
     with open(summary_path, "w", encoding="utf-8") as stream:
@@ -67,7 +80,8 @@ def main():
 
         figure, axes = plt.subplots(3, 1, figsize=(9, 8), sharex=True)
         axes[0].plot(times, chase_distances, color="black", linewidth=1.8)
-        axes[0].axhline(7.5, color="gray", linestyle="--", label="capture radius")
+        axes[0].axhline(capture_distance_m, color="gray", linestyle="--",
+                        label="capture radius")
         axes[0].set_ylabel("distance (m)")
         axes[0].legend(loc="best")
         axes[0].grid(True, alpha=0.3)

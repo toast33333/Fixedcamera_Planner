@@ -78,6 +78,9 @@ public:
         ROS_INFO("[FixedCameraIBVS] Started: fixed camera, attitude-compensated LOS, FOV barrier.");
         ROS_INFO("[FixedCameraIBVS] Visual input unchanged; detection mode=%d topic=%s.",
                  detection_mode_, detection_topic_.c_str());
+        ROS_INFO("[FixedCameraIBVS] Control axes: horizontal=%s, vertical=%s.",
+                 enable_horizontal_control_ ? "enabled" : "disabled",
+                 enable_height_control_ ? "enabled" : "disabled");
         ROS_INFO("[FixedCameraIBVS] Pose=%s, image delay=%.3f s, "
                  "FOV limits: horizontal +/-%.1f deg, vertical +/-%.1f deg.",
                  pose_topic_.c_str(), image_delay_sec_,
@@ -165,6 +168,7 @@ private:
         nh.param("max_yaw_rate", max_yaw_rate_, 1.0);
         nh.param("yaw_enable_speed_ratio", yaw_enable_speed_ratio_, 0.4);
 
+        nh.param("enable_horizontal_control", enable_horizontal_control_, true);
         nh.param("enable_height_control", enable_height_control_, true);
         nh.param("k_z_ff", vertical_position_gain_, 1.0);
         nh.param("N_nav_z", vertical_navigation_gain_, 2.0);
@@ -500,14 +504,20 @@ private:
         const double vertical_angle = std::atan2(los_camera.y(), los_camera.z());
         const double horizontal_ratio = std::fabs(horizontal_angle) / safe_h;
         const double vertical_ratio = std::fabs(vertical_angle) / safe_v;
-        const double fov_ratio = std::max(horizontal_ratio, vertical_ratio);
+        const double active_horizontal_ratio =
+            enable_horizontal_control_ ? horizontal_ratio : 0.0;
+        const double active_vertical_ratio =
+            enable_height_control_ ? vertical_ratio : 0.0;
+        const double fov_ratio =
+            std::max(active_horizontal_ratio, active_vertical_ratio);
 
         const double horizontal_barrier_scale =
             computeAxisFovBarrierScale(horizontal_ratio);
         const double vertical_barrier_scale =
             computeAxisFovBarrierScale(vertical_ratio);
-        const double barrier_scale =
-            std::max(horizontal_barrier_scale, vertical_barrier_scale);
+        const double barrier_scale = std::max(
+            enable_horizontal_control_ ? horizontal_barrier_scale : 1.0,
+            enable_height_control_ ? vertical_barrier_scale : 1.0);
         const double speed_scale = computeForwardSpeedScale(fov_ratio);
 
         const double current_yaw_to_los = std::atan2(los_body.y(), los_body.x());
@@ -535,7 +545,8 @@ private:
         const bool fov_emergency = fov_ratio >= fov_emergency_yaw_ratio_;
         double yaw_rate_command = 0.0;
         double nominal_yaw_rate_command = 0.0;
-        if (yaw_control_enabled_ || fov_emergency) {
+        if (enable_horizontal_control_ &&
+            (yaw_control_enabled_ || fov_emergency)) {
             const double position_term =
                 std::fabs(predicted_u - desired_u_offset_px_) > pixel_threshold_x_
                     ? yaw_position_gain_ * horizontal_barrier_scale * yaw_error
@@ -544,7 +555,7 @@ private:
                 position_term + yaw_rate_gain_ * azimuth_filter_.rate(),
                 -max_yaw_rate_, max_yaw_rate_);
         }
-        if (yaw_control_enabled_) {
+        if (enable_horizontal_control_ && yaw_control_enabled_) {
             const double nominal_position_term =
                 std::fabs(predicted_u - desired_u_offset_px_) > pixel_threshold_x_
                     ? yaw_position_gain_ * yaw_error
@@ -567,14 +578,16 @@ private:
             forward_speed_ * speed_scale, active_forward_speed_, dt);
         const double lateral_acceleration =
             navigation_gain_ * commanded_forward_speed * azimuth_filter_.rate();
-        const double lateral_velocity = clampValue(
-            lateral_acceleration * dt,
-            -max_lateral_velocity_, max_lateral_velocity_);
+        const double lateral_velocity = enable_horizontal_control_
+            ? clampValue(lateral_acceleration * dt,
+                         -max_lateral_velocity_, max_lateral_velocity_)
+            : 0.0;
         const double nominal_lateral_acceleration =
             navigation_gain_ * nominal_commanded_forward_speed * azimuth_filter_.rate();
-        const double nominal_lateral_velocity = clampValue(
-            nominal_lateral_acceleration * dt,
-            -max_lateral_velocity_, max_lateral_velocity_);
+        const double nominal_lateral_velocity = enable_horizontal_control_
+            ? clampValue(nominal_lateral_acceleration * dt,
+                         -max_lateral_velocity_, max_lateral_velocity_)
+            : 0.0;
 
         double vertical_velocity = 0.0;
         double nominal_vertical_velocity = 0.0;
@@ -740,6 +753,10 @@ private:
     }
 
     void updateYawEnableState() {
+        if (!enable_horizontal_control_) {
+            yaw_control_enabled_ = false;
+            return;
+        }
         if (yaw_control_enabled_) return;
         if (current_horizontal_speed_ >= forward_speed_ * yaw_enable_speed_ratio_) {
             yaw_control_enabled_ = true;
@@ -864,6 +881,7 @@ private:
     double yaw_enable_speed_ratio_ = 0.4;
     bool yaw_control_enabled_ = false;
 
+    bool enable_horizontal_control_ = true;
     bool enable_height_control_ = true;
     double vertical_position_gain_ = 1.0;
     double vertical_navigation_gain_ = 2.0;

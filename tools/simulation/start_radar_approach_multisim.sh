@@ -106,6 +106,8 @@ MULTISIM_LAUNCH_FILE=${MULTISIM_LAUNCH_FILE:-radar_approach_multisim.launch}
 VISUAL_FORWARD_SPEED_MPS=${VISUAL_FORWARD_SPEED_MPS:-4.5}
 FORWARD_SPEED_ACCEL_LIMIT_MPS2=${FORWARD_SPEED_ACCEL_LIMIT_MPS2:-0.0}
 GATE_DETECTION_UNTIL_CHASE=${GATE_DETECTION_UNTIL_CHASE:-false}
+ENABLE_HORIZONTAL_CONTROL=${ENABLE_HORIZONTAL_CONTROL:-true}
+ENABLE_HEIGHT_CONTROL=${ENABLE_HEIGHT_CONTROL:-true}
 START_IBVS=${START_IBVS:-true}
 STOP_ON_HANDOVER=${STOP_ON_HANDOVER:-false}
 DISTURBANCE_MODEL=${DISTURBANCE_MODEL:-none}
@@ -226,6 +228,7 @@ export MULTISIM_LAUNCH_FILE
 export VISUAL_FORWARD_SPEED_MPS
 export FORWARD_SPEED_ACCEL_LIMIT_MPS2
 export GATE_DETECTION_UNTIL_CHASE
+export ENABLE_HORIZONTAL_CONTROL ENABLE_HEIGHT_CONTROL
 export START_IBVS STOP_ON_HANDOVER
 export DISTURBANCE_MODEL DISTURBANCE_SEED DISTURBANCE_TIME_CONSTANT_S
 export DISTURBANCE_CLIP_SIGMA INTERCEPTOR_DISTURBANCE_STD_XY_MPS
@@ -302,6 +305,7 @@ keys = [
     "VISUAL_FORWARD_SPEED_MPS",
     "FORWARD_SPEED_ACCEL_LIMIT_MPS2",
     "GATE_DETECTION_UNTIL_CHASE",
+    "ENABLE_HORIZONTAL_CONTROL", "ENABLE_HEIGHT_CONTROL",
     "START_IBVS", "STOP_ON_HANDOVER",
     "DISTURBANCE_MODEL", "DISTURBANCE_SEED", "DISTURBANCE_TIME_CONSTANT_S",
     "DISTURBANCE_CLIP_SIGMA", "INTERCEPTOR_DISTURBANCE_STD_XY_MPS",
@@ -479,6 +483,7 @@ spawn_vehicle 1 0.0 0.0
 spawn_vehicle 2 "$TARGET_SPAWN_X" "$TARGET_SPAWN_Y"
 sleep 4
 
+video_capture_xid=0
 if [[ "$SHOW_GUI" == "1" ]]; then
   gzclient > "$run_dir/gzclient.log" 2>&1 &
   child_pids+=("$!")
@@ -487,6 +492,15 @@ if [[ "$SHOW_GUI" == "1" ]]; then
   # some builds.  Bound it so display setup cannot block the actual run.
   timeout 3s gz camera -c user_camera -f iris_1 \
     >> "$run_dir/gzclient.log" 2>&1 || true
+  if video_capture_xid=$(python3 "$SCRIPT_DIR/focus_x11_window.py" \
+      --title Gazebo --timeout 8 2>> "$run_dir/gzclient.log"); then
+    echo "Recording Gazebo window XID $video_capture_xid." \
+      >> "$run_dir/gzclient.log"
+  else
+    video_capture_xid=0
+    echo "Could not focus Gazebo; falling back to full-display capture." \
+      >> "$run_dir/gzclient.log"
+  fi
 fi
 
 if [[ "$RECORD_VIDEO" == "1" ]]; then
@@ -506,8 +520,13 @@ if [[ "$RECORD_VIDEO" == "1" ]]; then
     exit 4
   fi
   date +%s.%N > "$run_dir/video_start_epoch_s.txt"
+  ximagesrc_args=(display-name="$DISPLAY" use-damage=0 show-pointer=false)
+  if [[ "$video_capture_xid" =~ ^[0-9]+$ ]] &&
+     [[ "$video_capture_xid" != "0" ]]; then
+    ximagesrc_args+=(xid="$video_capture_xid")
+  fi
   gst-launch-1.0 -e \
-    ximagesrc display-name="$DISPLAY" use-damage=0 show-pointer=false \
+    ximagesrc "${ximagesrc_args[@]}" \
     ! video/x-raw,framerate="${VIDEO_FRAMERATE}/1" \
     ! videoscale \
     ! video/x-raw,width=1920,height=1080 \
@@ -651,6 +670,8 @@ timeout --signal=TERM --kill-after=10s "${RUN_WALL_TIMEOUT_S}s" \
     visual_forward_speed_mps:="$VISUAL_FORWARD_SPEED_MPS" \
     forward_speed_accel_limit_mps2:="$FORWARD_SPEED_ACCEL_LIMIT_MPS2" \
     gate_detection_until_chase:="$GATE_DETECTION_UNTIL_CHASE" \
+    enable_horizontal_control:="$ENABLE_HORIZONTAL_CONTROL" \
+    enable_height_control:="$ENABLE_HEIGHT_CONTROL" \
     start_ibvs:="$START_IBVS" \
     stop_on_handover:="$STOP_ON_HANDOVER" \
     disturbance_model:="$DISTURBANCE_MODEL" \

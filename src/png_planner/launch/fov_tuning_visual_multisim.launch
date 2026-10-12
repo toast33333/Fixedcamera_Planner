@@ -42,6 +42,8 @@
   <arg name="visual_forward_speed_mps" default="8.0" />
   <arg name="forward_speed_accel_limit_mps2" default="1.5" />
   <arg name="gate_detection_until_chase" default="true" />
+  <arg name="enable_horizontal_control" default="true" />
+  <arg name="enable_height_control" default="true" />
 
   <group ns="interceptor">
     <include file="$(find mavros)/launch/px4.launch">
@@ -70,6 +72,8 @@
     <param name="lost_forward_speed" value="0.0" />
     <param name="V_default" value="$(arg visual_forward_speed_mps)" />
     <param name="forward_speed_accel_limit_mps2" value="$(arg forward_speed_accel_limit_mps2)" />
+    <param name="enable_horizontal_control" value="$(arg enable_horizontal_control)" />
+    <param name="enable_height_control" value="$(arg enable_height_control)" />
     <param name="fov_barrier_gain" value="$(arg fov_barrier_gain)" />
     <param name="fov_barrier_max" value="$(arg fov_barrier_max)" />
     <param name="fov_slowdown_start_ratio" value="$(arg fov_slowdown_start_ratio)" />
