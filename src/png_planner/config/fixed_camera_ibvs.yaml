@@ -37,8 +37,8 @@ forward_speed_smoothing_alpha: 0.25
 # Simulation-selected starting value for direct visual interception. Validate
 # the same acceleration limit on the real airframe before field deployment.
 forward_speed_accel_limit_mps2: 1.5
-N_nav: 2.0
-max_lateral_velocity: 2.0
+# Horizontal LOS error is corrected by yaw only. The former horizontal PN
+# body-left velocity output has been removed from fixed_camera_ibvs.
 k_yaw: 1.5
 k_yaw_d: 0.3
 max_yaw_rate: 1.0
@@ -58,7 +58,7 @@ fov_horizontal_limit_deg: 23.94
 fov_vertical_limit_deg: 18.54
 fov_barrier_gain: 0.20
 fov_barrier_max: 4.0
-# Keep PN closing speed unchanged.  The FOV term corrects LOS/yaw and vertical
+# Keep forward closing speed unchanged. The FOV term corrects yaw and vertical
 # motion but does not slow the interceptor, which avoids delaying interception.
 fov_slowdown_start_ratio: 0.99
 fov_min_forward_speed_ratio: 1.0

@@ -78,7 +78,8 @@ public:
         ROS_INFO("[FixedCameraIBVS] Started: fixed camera, attitude-compensated LOS, FOV barrier.");
         ROS_INFO("[FixedCameraIBVS] Visual input unchanged; detection mode=%d topic=%s.",
                  detection_mode_, detection_topic_.c_str());
-        ROS_INFO("[FixedCameraIBVS] Control axes: horizontal=%s, vertical=%s.",
+        ROS_INFO("[FixedCameraIBVS] Control axes: horizontal yaw/FOV=%s, "
+                 "lateral PN velocity=removed, vertical=%s.",
                  enable_horizontal_control_ ? "enabled" : "disabled",
                  enable_height_control_ ? "enabled" : "disabled");
         ROS_INFO("[FixedCameraIBVS] Pose=%s, image delay=%.3f s, "
@@ -161,8 +162,6 @@ private:
                  forward_speed_smoothing_alpha_, 0.25);
         nh.param("forward_speed_accel_limit_mps2",
                  forward_speed_accel_limit_mps2_, 0.0);
-        nh.param("N_nav", navigation_gain_, 2.0);
-        nh.param("max_lateral_velocity", max_lateral_velocity_, 2.0);
         nh.param("k_yaw", yaw_position_gain_, 1.5);
         nh.param("k_yaw_d", yaw_rate_gain_, 0.3);
         nh.param("max_yaw_rate", max_yaw_rate_, 1.0);
@@ -263,7 +262,6 @@ private:
             std::max(forward_speed_accel_limit_mps2_, 0.0);
         max_yaw_rate_ = std::max(max_yaw_rate_, 0.0);
         max_vertical_velocity_ = std::max(max_vertical_velocity_, 0.0);
-        max_lateral_velocity_ = std::max(max_lateral_velocity_, 0.0);
         fov_horizontal_limit_deg_ =
             clampValue(fov_horizontal_limit_deg_, 1.0, 89.0);
         fov_vertical_limit_deg_ =
@@ -576,19 +574,6 @@ private:
             forward_speed_, nominal_forward_speed_, dt);
         const double commanded_forward_speed = rampForwardSpeed(
             forward_speed_ * speed_scale, active_forward_speed_, dt);
-        const double lateral_acceleration =
-            navigation_gain_ * commanded_forward_speed * azimuth_filter_.rate();
-        const double lateral_velocity = enable_horizontal_control_
-            ? clampValue(lateral_acceleration * dt,
-                         -max_lateral_velocity_, max_lateral_velocity_)
-            : 0.0;
-        const double nominal_lateral_acceleration =
-            navigation_gain_ * nominal_commanded_forward_speed * azimuth_filter_.rate();
-        const double nominal_lateral_velocity = enable_horizontal_control_
-            ? clampValue(nominal_lateral_acceleration * dt,
-                         -max_lateral_velocity_, max_lateral_velocity_)
-            : 0.0;
-
         double vertical_velocity = 0.0;
         double nominal_vertical_velocity = 0.0;
         if (enable_height_control_) {
@@ -622,15 +607,18 @@ private:
                 -max_vertical_velocity_, max_vertical_velocity_);
         }
 
+        // Horizontal LOS error is handled only by yaw. Do not add a body-left
+        // PN velocity component; the vehicle has forward, vertical, and yaw
+        // commands only during visual interception.
         publishBodyVelocity(now, commanded_forward_speed,
-                            lateral_velocity, vertical_velocity,
+                            0.0, vertical_velocity,
                             yaw_rate_command);
         publishCommandComparison(
             now,
-            commanded_forward_speed, lateral_velocity, vertical_velocity,
+            commanded_forward_speed, 0.0, vertical_velocity,
             yaw_rate_command,
             nominal_commanded_forward_speed,
-            nominal_lateral_velocity, nominal_vertical_velocity,
+            0.0, nominal_vertical_velocity,
             nominal_yaw_rate_command);
         publishDebug(now, los_world, horizontal_ratio, vertical_ratio, barrier_scale);
 
@@ -873,8 +861,6 @@ private:
     double active_forward_speed_ = 0.0;
     double nominal_forward_speed_ = 0.0;
     bool forward_speed_ramp_initialized_ = false;
-    double navigation_gain_ = 2.0;
-    double max_lateral_velocity_ = 2.0;
     double yaw_position_gain_ = 1.5;
     double yaw_rate_gain_ = 0.3;
     double max_yaw_rate_ = 1.0;
