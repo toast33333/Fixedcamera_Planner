@@ -1,0 +1,106 @@
+# Fixed-camera system: one-stop core tuning parameters.
+#
+# This file is intentionally flat.  It is loaded into both private node
+# namespaces after their complete base configuration.  Each node ignores keys
+# that it does not use, so the four tuning groups can live in one file.
+# Units are written in parameter names wherever practical.
+
+# ============================================================================
+# 1. Visual interception performance
+#    These are the main k/N gains in the post-handover controller.
+# ============================================================================
+k_yaw: 1.5
+k_yaw_d: 0.3
+k_z_ff: 1.0
+N_nav_z: 2.0
+vertical_integrator_decay: 0.98
+
+# ============================================================================
+# 2. Interceptor dynamics and command limits
+#    Horizontal limits are widened for targets moving at 5--15 m/s.  The
+#    planner can request up to 20 m/s, leaving 5 m/s pursuit margin at the
+#    fastest planned target speed.  These do not change PX4 firmware limits.
+# ============================================================================
+# Visual phase
+min_forward_speed: 1.0
+max_forward_speed: 20.0
+forward_speed_smoothing_alpha: 0.25
+forward_speed_accel_limit_mps2: 1.5
+max_yaw_rate: 1.0
+max_vz: 2.0
+
+# Radar-approach phase
+max_approach_speed_mps: 20.0
+max_vertical_speed_mps: 0.8
+max_yaw_rate_radps: 0.8
+max_position_correction_speed_mps: 6.0
+near_position_correction_speed_mps: 1.5
+max_approach_acceleration_mps2: 1.5
+max_vertical_acceleration_mps2: 0.8
+max_yaw_acceleration_radps2: 0.6
+max_handover_forward_speed_mps: 20.0
+
+# ============================================================================
+# 3. Radar approach and handover
+# ============================================================================
+# Radar timing/filter
+expected_radar_period_sec: 3.0
+radar_timeout_sec: 9.5
+radar_bootstrap_samples: 4
+radar_measurement_std_m: 5.773502692
+radar_process_accel_std_mps2: 0.20
+radar_bootstrap_huber_delta_m: 10.0
+radar_nis_soft_threshold: 9.21
+radar_nis_reject_threshold: 25.0
+max_radar_innovation_m: 30.0
+# These are estimator plausibility limits, not interceptor command limits.
+max_target_speed_mps: 20.0
+max_target_horizontal_speed_mps: 20.0
+max_target_vertical_speed_mps: 0.0
+
+# Moving-point approach
+terminal_camera_range_m: 25.0
+position_gain_xy: 0.40
+position_gain_z: 0.35
+target_velocity_feedforward_gain_xy: 1.0
+target_velocity_feedforward_gain_z: 0.0
+yaw_gain: 1.2
+use_braking_speed_profile: true
+approach_braking_deceleration_mps2: 2.0
+approach_braking_position_buffer_m: 2.5
+visual_stabilization_start_range_m: 35.0
+visual_terminal_correction_speed_mps: 1.2
+visual_terminal_acceleration_mps2: 0.5
+attitude_slowdown_start_deg: 8.0
+attitude_slowdown_full_deg: 15.0
+
+# Handover speed recommendation and gates
+closing_speed_margin_mps: 2.0
+min_handover_forward_speed_mps: 3.0
+handover_center_area_ratio: 0.40
+required_centered_detections: 10
+handover_min_estimated_range_m: 10.0
+handover_max_estimated_range_m: 30.0
+max_handover_velocity_std_mps: 1.0
+max_handover_radar_age_sec: 5.0
+max_handover_command_yaw_rate_radps: 0.30
+max_handover_closing_speed_mps: 2.0
+max_handover_opening_speed_mps: 0.5
+max_handover_tilt_deg: 12.0
+max_handover_horizontal_acceleration_mps2: 0.6
+handover_stable_duration_sec: 0.5
+handover_blend_duration_sec: 2.0
+
+# ============================================================================
+# 4. Field-of-view retention
+#    The additive guard is zero inside the central 50% image-area region.
+# ============================================================================
+fov_horizontal_limit_deg: 23.94
+fov_vertical_limit_deg: 18.54
+fov_guard_center_area_ratio: 0.50
+fov_guard_yaw_gain_radps: 0.20
+fov_guard_vertical_gain_mps: 0.20
+fov_guard_shape_max: 4.0
+fov_slowdown_start_ratio: 0.99
+fov_min_forward_speed_ratio: 1.0
+fov_emergency_yaw_ratio: 0.85

@@ -164,7 +164,7 @@ private:
         nh.param<std::string>("forward_speed_topic", forward_speed_topic_,
                               "/fixed_camera_ibvs/forward_speed_setpoint");
         nh.param("min_forward_speed", min_forward_speed_, 1.0);
-        nh.param("max_forward_speed", max_forward_speed_, 12.0);
+        nh.param("max_forward_speed", max_forward_speed_, 20.0);
         nh.param("forward_speed_smoothing_alpha",
                  forward_speed_smoothing_alpha_, 0.25);
         nh.param("forward_speed_accel_limit_mps2",
@@ -273,10 +273,14 @@ private:
 
         fx_ = std::max(fx_, 1.0);
         fy_ = std::max(fy_, 1.0);
-        forward_speed_ = std::max(forward_speed_, 0.0);
-        lost_forward_speed_ = std::max(lost_forward_speed_, 0.0);
         min_forward_speed_ = std::max(min_forward_speed_, 0.0);
         max_forward_speed_ = std::max(max_forward_speed_, min_forward_speed_);
+        // Apply the same hard upper bound to both static launch/YAML speeds and
+        // the dynamic handover speed topic.  Previously max_forward_speed only
+        // constrained the topic callback, so a large V_default could bypass it.
+        forward_speed_ = clampValue(forward_speed_, 0.0, max_forward_speed_);
+        lost_forward_speed_ =
+            clampValue(lost_forward_speed_, 0.0, max_forward_speed_);
         forward_speed_smoothing_alpha_ =
             clampValue(forward_speed_smoothing_alpha_, 0.0, 1.0);
         forward_speed_accel_limit_mps2_ =
@@ -941,7 +945,7 @@ private:
     std::string forward_speed_topic_ =
         "/fixed_camera_ibvs/forward_speed_setpoint";
     double min_forward_speed_ = 1.0;
-    double max_forward_speed_ = 12.0;
+    double max_forward_speed_ = 20.0;
     double forward_speed_smoothing_alpha_ = 0.25;
     double forward_speed_accel_limit_mps2_ = 0.0;
     double active_forward_speed_ = 0.0;

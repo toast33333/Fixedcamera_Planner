@@ -45,8 +45,8 @@ radar_bootstrap_huber_delta_m: 10.0
 radar_nis_soft_threshold: 9.21
 radar_nis_reject_threshold: 25.0
 target_altitude_process_std_mps: 0.10
-max_target_speed_mps: 7.0
-max_target_horizontal_speed_mps: 7.0
+max_target_speed_mps: 20.0
+max_target_horizontal_speed_mps: 20.0
 max_target_vertical_speed_mps: 0.0
 max_radar_innovation_m: 30.0
 
@@ -75,7 +75,7 @@ position_gain_z: 0.35
 target_velocity_feedforward_gain_xy: 1.0
 target_velocity_feedforward_gain_z: 0.0
 yaw_gain: 1.2
-max_approach_speed_mps: 12.0
+max_approach_speed_mps: 20.0
 max_vertical_speed_mps: 0.8
 max_yaw_rate_radps: 0.8
 max_position_correction_speed_mps: 6.0
@@ -116,7 +116,7 @@ attitude_slowdown_full_deg: 15.0
 # target horizontal speed + closing margin, with limits.
 closing_speed_margin_mps: 2.0
 min_handover_forward_speed_mps: 3.0
-max_handover_forward_speed_mps: 12.0
+max_handover_forward_speed_mps: 20.0
 
 # Require visual lock and a safe estimated range. The old single-pose gate is
 # disabled: any range in 10--30 m may hand over if the target is in the central

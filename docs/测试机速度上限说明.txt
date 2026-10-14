@@ -1,0 +1,128 @@
+固定相机系统——测试机速度限制位置说明
+更新时间：2026-10-15
+
+一、本次修改结论
+
+计划靶机水平速度范围：5～15 m/s。
+测试机规划层水平速度上限统一放宽到 20 m/s，给最快靶机保留约 5 m/s 的追赶余量。
+
+本次由 12 m/s 改为 20 m/s：
+1. 视觉阶段前向速度硬上限 max_forward_speed。
+2. 雷达抵近阶段最终水平速度硬上限 max_approach_speed_mps。
+3. 交接后给视觉控制器的前向速度建议上限 max_handover_forward_speed_mps。
+
+本次由 7 m/s 改为 20 m/s：
+4. 雷达目标总速度合理性上限 max_target_speed_mps。
+5. 雷达目标水平速度合理性上限 max_target_horizontal_speed_mps。
+
+第4、5项不是测试机指令上限，但原来的7 m/s会把高速靶机的估计速度截断，
+从而间接导致测试机追不上15 m/s靶机，所以必须一起放宽。
+
+
+二、会直接限制测试机速度的参数和位置
+
+1. max_approach_speed_mps（现在为20.0 m/s）
+   阶段：雷达抵近。
+   作用：对抵近节点最终输出的水平速度矢量模长做硬限幅。
+   配置位置：src/png_planner/config/core_tuning.yaml
+   基础配置：src/png_planner/config/radar_approach_handover.yaml
+   生效代码：src/png_planner/src/radar_approach_handover.cpp
+             buildApproachCommand()中的limitHorizontal()。
+
+2. max_handover_forward_speed_mps（现在为20.0 m/s）
+   阶段：雷达向视觉交接。
+   作用：交接时按“靶机估计水平速度+closing_speed_margin_mps”计算视觉阶段
+         前向速度建议，并在这里做上限截断。
+   生效代码：radar_approach_handover.cpp中的recommendedForwardSpeed()。
+
+3. max_forward_speed（现在为20.0 m/s）
+   阶段：视觉控制。
+   作用：限制视觉控制器接受的前向速度。现在同时约束：
+         a. YAML/launch中的V_default；
+         b. 雷达交接节点通过forward_speed_topic发送的速度；
+         c. lost_forward_speed。
+   生效代码：src/png_planner/src/fixed_camera_ibvs.cpp中的参数检查和
+             forwardSpeedCallback()。
+   说明：以前它只限制话题输入，V_default可以绕过这个上限；本次已补齐。
+
+4. max_vz（保持2.0 m/s）
+   阶段：视觉控制。
+   作用：限制视觉阶段竖直速度绝对值。
+   本次不放宽，因为当前计划靶机只做水平飞行。
+
+5. max_vertical_speed_mps（保持0.8 m/s）
+   阶段：雷达抵近。
+   作用：限制抵近阶段竖直速度绝对值。
+   本次不放宽，原因同上。
+
+
+三、不会直接限定最高速度，但会影响多久能达到最高速度
+
+1. forward_speed_accel_limit_mps2（1.5 m/s^2）
+   视觉阶段前向速度爬升速率。
+
+2. max_approach_acceleration_mps2（1.5 m/s^2）
+   雷达抵近阶段水平速度指令变化率。
+
+3. visual_terminal_acceleration_mps2（0.5 m/s^2）
+   接近交接区域且视觉有效时使用的较小水平加速度限制。
+
+4. max_vertical_acceleration_mps2（0.8 m/s^2）
+   抵近阶段竖直速度指令变化率。
+
+5. max_yaw_acceleration_radps2（0.6 rad/s^2）
+   抵近阶段偏航角速度变化率。
+
+这些参数太小不会改变理论最高速度，但会使测试机加速太慢，面对高速靶机时仍可能追不上。
+
+
+四、限制“修正量”而不是限制测试机总速度的参数
+
+1. max_position_correction_speed_mps（6.0 m/s）
+   限制位置误差反馈产生的水平修正速度，不限制“靶机速度前馈+修正”的总速度；
+   总速度最终仍由max_approach_speed_mps限制。
+
+2. near_position_correction_speed_mps（1.5 m/s）
+   接近交接位置时的位置修正速度限制，用于减小姿态变化。
+
+3. visual_terminal_correction_speed_mps（1.2 m/s）
+   视觉已经有效且接近交接区域时的位置修正速度限制。
+
+4. radar_coast_max_speed_mps（1.0 m/s）
+   雷达长时间没有新数据、进入外推滑行状态时的保护速度，不是正常追踪速度上限。
+
+
+五、雷达目标速度估计限制
+
+1. max_target_speed_mps（20.0 m/s）
+   目标三维估计速度的合理性限制。
+
+2. max_target_horizontal_speed_mps（20.0 m/s）
+   目标水平估计速度的合理性限制。
+
+3. max_target_vertical_speed_mps（0.0 m/s）
+   当前实验明确假设靶机水平飞行，因此目标竖直速度固定为0。
+
+
+六、统一调参文件
+
+文件：src/png_planner/config/core_tuning.yaml
+
+该文件分为四块：
+1. 视觉拦截性能参数：k_yaw、k_yaw_d、k_z_ff、N_nav_z等。
+2. 测试机动力学和指令上限：max_forward_speed、max_approach_speed_mps、
+   加速度限制、竖直速度限制等。
+3. 雷达抵近与交接参数：雷达滤波、位置增益、速度前馈、制动曲线、交接门限等。
+4. 视野保持参数：中心50%区域、附加偏航/竖直修正增益、视场边界等。
+
+生产launch会先加载原来的完整基础配置，再加载core_tuning.yaml，所以统一文件中的
+同名参数优先。批量仿真launch仍允许某一个CSV工况/launch参数覆盖统一文件，这是为了
+批量扫参；不做单独覆盖时，以core_tuning.yaml为统一基线。
+
+
+七、PX4飞控本身的上限（重要）
+
+上述20 m/s是本项目规划/控制代码允许发布的上限，不代表真机一定能够达到20 m/s。
+PX4内部参数（例如MPC_XY_VEL_MAX）、机型动力、倾角限制、加速度限制和外场安全边界
+仍可能把实际速度限制在更低值。本项目没有自动修改飞控参数，避免软件启动时静默改变
+真机安全限制。外场使用前应由飞控负责人单独核对PX4参数和机体能力。

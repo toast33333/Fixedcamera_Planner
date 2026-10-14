@@ -1,5 +1,6 @@
 <launch>
   <arg name="results_dir" default="/tmp/fov_tuning_visual_multisim" />
+  <arg name="core_tuning_config" default="$(find png_planner)/config/core_tuning.yaml" />
   <arg name="target_speed_mps" default="6.0" />
   <arg name="target_heading_deg" default="0.0" />
   <arg name="target_turn_rate_degps" default="0.5" />
@@ -72,6 +73,8 @@
         output="screen"
         clear_params="true">
     <rosparam command="load" file="$(find png_planner)/config/fixed_camera_multisim.yaml" />
+    <!-- Batch-case arguments below deliberately override this shared baseline. -->
+    <rosparam command="load" file="$(arg core_tuning_config)" />
     <param name="command_topic" value="/fixed_camera_sim/ibvs_candidate" />
     <param name="enable_forward_speed_topic" value="false" />
     <param name="lost_forward_speed" value="0.0" />

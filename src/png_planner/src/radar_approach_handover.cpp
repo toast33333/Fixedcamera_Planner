@@ -171,7 +171,7 @@ private:
         nh.param("target_velocity_feedforward_gain_z",
                  target_velocity_feedforward_gain_z_, 1.0);
         nh.param("yaw_gain", yaw_gain_, 1.2);
-        nh.param("max_approach_speed_mps", max_approach_speed_mps_, 12.0);
+        nh.param("max_approach_speed_mps", max_approach_speed_mps_, 20.0);
         nh.param("max_vertical_speed_mps", max_vertical_speed_mps_, 2.0);
         nh.param("max_yaw_rate_radps", max_yaw_rate_radps_, 0.8);
         nh.param("max_position_correction_speed_mps",
@@ -217,7 +217,7 @@ private:
         nh.param("min_handover_forward_speed_mps",
                  min_handover_forward_speed_mps_, 3.0);
         nh.param("max_handover_forward_speed_mps",
-                 max_handover_forward_speed_mps_, 12.0);
+                 max_handover_forward_speed_mps_, 20.0);
 
         nh.param("handover_position_tolerance_m",
                  handover_position_tolerance_m_, 2.5);
@@ -1444,7 +1444,7 @@ private:
     double target_velocity_feedforward_gain_xy_ = 1.0;
     double target_velocity_feedforward_gain_z_ = 1.0;
     double yaw_gain_ = 1.2;
-    double max_approach_speed_mps_ = 12.0;
+    double max_approach_speed_mps_ = 20.0;
     double max_vertical_speed_mps_ = 2.0;
     double max_yaw_rate_radps_ = 0.8;
     double max_position_correction_speed_mps_ = 6.0;
@@ -1468,7 +1468,7 @@ private:
     double attitude_slowdown_full_rad_ = degToRad(15.0);
     double closing_speed_margin_mps_ = 2.0;
     double min_handover_forward_speed_mps_ = 3.0;
-    double max_handover_forward_speed_mps_ = 12.0;
+    double max_handover_forward_speed_mps_ = 20.0;
     double handover_position_tolerance_m_ = 2.5;
     double handover_yaw_tolerance_rad_ = degToRad(10.0);
     bool use_legacy_pose_handover_gate_ = false;

@@ -1,5 +1,6 @@
 <launch>
   <arg name="results_dir" default="/tmp/radar_approach_multisim" />
+  <arg name="core_tuning_config" default="$(find png_planner)/config/core_tuning.yaml" />
   <arg name="target_speed_mps" default="2.0" />
   <arg name="target_heading_deg" default="0.0" />
   <arg name="target_turn_rate_degps" default="0.0" />
@@ -20,8 +21,8 @@
   <arg name="filter_alpha" default="0.70" />
   <arg name="filter_beta" default="0.20" />
   <arg name="max_radar_innovation_m" default="80.0" />
-  <arg name="max_target_speed_mps" default="7.0" />
-  <arg name="max_target_horizontal_speed_mps" default="7.0" />
+  <arg name="max_target_speed_mps" default="20.0" />
+  <arg name="max_target_horizontal_speed_mps" default="20.0" />
   <arg name="max_target_vertical_speed_mps" default="0.0" />
   <arg name="terminal_camera_range_m" default="25.0" />
   <arg name="position_gain_xy" default="0.40" />
@@ -204,6 +205,8 @@
         output="screen"
         clear_params="true">
     <rosparam command="load" file="$(find png_planner)/config/fixed_camera_multisim.yaml" />
+    <!-- Batch-case arguments below deliberately override this shared baseline. -->
+    <rosparam command="load" file="$(arg core_tuning_config)" />
     <param name="pose_topic" value="/fixed_camera_sim/nav/pose" />
     <param name="attitude_topic" value="/fixed_camera_sim/nav/imu" />
     <param name="velocity_topic" value="/fixed_camera_sim/nav/velocity" />
@@ -239,6 +242,8 @@
         output="screen"
         clear_params="true">
     <rosparam command="load" file="$(find png_planner)/config/radar_approach_handover.yaml" />
+    <!-- Batch-case arguments below deliberately override this shared baseline. -->
+    <rosparam command="load" file="$(arg core_tuning_config)" />
     <param name="radar_input_mode" value="local_pose" />
     <param name="radar_local_topic" value="/radar/target/position" />
     <param name="self_pose_topic" value="/fixed_camera_sim/nav/pose" />

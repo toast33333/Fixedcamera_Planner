@@ -1,5 +1,6 @@
 <launch>
   <arg name="results_dir" default="/tmp/fixed_camera_multisim" />
+  <arg name="core_tuning_config" default="$(find png_planner)/config/core_tuning.yaml" />
 
   <!-- PX4 instances are numbered 1 and 2 by sitl_multiple_run.sh. -->
   <group ns="interceptor">
@@ -24,6 +25,7 @@
         output="screen"
         clear_params="true">
     <rosparam command="load" file="$(find png_planner)/config/fixed_camera_multisim.yaml" />
+    <rosparam command="load" file="$(arg core_tuning_config)" />
   </node>
 
   <node pkg="png_planner"

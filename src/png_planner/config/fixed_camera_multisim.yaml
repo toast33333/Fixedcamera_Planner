@@ -23,6 +23,8 @@ velocity_topic: /interceptor/mavros/local_position/velocity_local
 command_topic: /fixed_camera_sim/ibvs_cmd
 V_default: 4.5
 lost_forward_speed: 0.0
+min_forward_speed: 1.0
+max_forward_speed: 20.0
 # Tuned for direct visual interception: suppress the acquisition pitch
 # transient without changing the steady 8 m/s forward closing command.
 forward_speed_accel_limit_mps2: 1.5

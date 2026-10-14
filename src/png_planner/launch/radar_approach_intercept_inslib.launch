@@ -2,6 +2,7 @@
   <arg name="inslib_config" default="$(find png_planner)/config/inslib_fixed_camera.yaml" />
   <arg name="ibvs_config" default="$(find png_planner)/config/fixed_camera_ibvs.yaml" />
   <arg name="approach_config" default="$(find png_planner)/config/radar_approach_handover.yaml" />
+  <arg name="core_tuning_config" default="$(find png_planner)/config/core_tuning.yaml" />
   <arg name="detection_mode" default="1" />
   <arg name="detection_topic" default="/object_detections" />
 
@@ -19,6 +20,7 @@
         name="fixed_camera_ibvs"
         output="screen">
     <rosparam command="load" file="$(arg ibvs_config)" />
+    <rosparam command="load" file="$(arg core_tuning_config)" />
     <param name="detection_mode" value="$(arg detection_mode)" />
     <param name="detection_topic" value="$(arg detection_topic)" />
     <param name="pose_topic" value="/inslib/local_position/pose" />
@@ -36,6 +38,7 @@
         name="radar_approach_handover"
         output="screen">
     <rosparam command="load" file="$(arg approach_config)" />
+    <rosparam command="load" file="$(arg core_tuning_config)" />
     <param name="detection_mode" value="$(arg detection_mode)" />
     <param name="detection_topic" value="$(arg detection_topic)" />
   </node>

@@ -72,6 +72,12 @@ Configuration and topic details are in
 `src/png_planner/config/radar_approach_handover.yaml` and
 `docs/radar_approach_handover.md`.
 
+The four groups of parameters that are expected to be tuned most often
+(visual interception gains, interceptor command/dynamics limits, radar
+approach/handover, and FOV retention) are collected in
+`src/png_planner/config/core_tuning.yaml`.  Production launches load this file
+after the complete base configurations, so its duplicate keys take priority.
+
 基于 ROS1 catkin 的视觉制导工作区，核心目标是根据图像检测框驱动无人机进行偏航跟踪、2D PNG 导引和 3D PNG 导引。
 
 当前工作区主要包含 3 个包：
