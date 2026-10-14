@@ -22,6 +22,8 @@ FIELDS = [
     "fov_correction_yaw_rms_rps",
     "fov_correction_yaw_ratio_percent",
     "handover_time_from_chase_s", "chase_duration_s",
+    "fov_guard_center_area_ratio", "fov_guard_yaw_gain_radps",
+    "fov_guard_vertical_gain_mps", "fov_guard_shape_max",
     "fov_barrier_gain", "fov_barrier_max", "fov_slowdown_start_ratio",
     "fov_min_forward_speed_ratio", "fov_emergency_yaw_ratio",
     "k_z_ff", "n_nav_z", "max_vz", "k_yaw", "k_yaw_d", "max_yaw_rate",

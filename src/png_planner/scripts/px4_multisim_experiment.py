@@ -224,6 +224,7 @@ class FixedCameraMultisimExperiment:
         self.ibvs_command = TwistStamped()
         self.nominal_pn_command = TwistStamped()
         self.fov_correction = TwistStamped()
+        self.fov_guard_shape = 0.0
         self.last_ibvs_command_time = rospy.Time(0)
         self.guidance_queue = []
         self.guidance_queue_sequence = 0
@@ -285,6 +286,7 @@ class FixedCameraMultisimExperiment:
             "nominal_pn_vx", "nominal_pn_vy", "nominal_pn_vz",
             "nominal_pn_yaw_rate", "fov_correction_vx", "fov_correction_vy",
             "fov_correction_vz", "fov_correction_yaw_rate",
+            "fov_guard_shape",
             "interceptor_disturbance_vx", "interceptor_disturbance_vy",
             "interceptor_disturbance_vz", "target_disturbance_vx",
             "target_disturbance_vy", "target_disturbance_vz",
@@ -337,6 +339,8 @@ class FixedCameraMultisimExperiment:
                          self.nominal_pn_command_cb, queue_size=5)
         rospy.Subscriber("/fixed_camera_ibvs/fov_correction", TwistStamped,
                          self.fov_correction_cb, queue_size=5)
+        rospy.Subscriber("/fixed_camera_ibvs/fov_state", Vector3Stamped,
+                         self.fov_state_cb, queue_size=5)
         rospy.Subscriber("/radar_approach/state", String,
                          self.radar_state_cb, queue_size=5)
         rospy.Subscriber("/radar_approach/handover_complete", Bool,
@@ -414,6 +418,11 @@ class FixedCameraMultisimExperiment:
 
     def fov_correction_cb(self, message):
         self.fov_correction = message
+
+    def fov_state_cb(self, message):
+        # z is the maximum dimensionless guard shape across yaw and vertical
+        # axes. It is exactly zero inside the configured central region.
+        self.fov_guard_shape = message.vector.z
 
     def radar_state_cb(self, message):
         self.radar_state = message.data
@@ -1061,6 +1070,7 @@ class FixedCameraMultisimExperiment:
             "%.6f" % nominal.linear.z, "%.6f" % nominal.angular.z,
             "%.6f" % correction.linear.x, "%.6f" % correction.linear.y,
             "%.6f" % correction.linear.z, "%.6f" % correction.angular.z,
+            "%.6f" % self.fov_guard_shape,
             "%.6f" % self.interceptor_disturbance[0],
             "%.6f" % self.interceptor_disturbance[1],
             "%.6f" % self.interceptor_disturbance[2],

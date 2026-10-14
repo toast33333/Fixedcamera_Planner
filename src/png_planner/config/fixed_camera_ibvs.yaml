@@ -52,12 +52,19 @@ max_vz: 2.0
 vertical_integrator_decay: 0.98
 
 # The measured physical half-FOV is horizontal +/-26.6 deg and vertical
-# +/-20.6 deg.  Use 90% of it as the controller's internal safety envelope so
-# the barrier acts before the target reaches the physical image boundary.
+# +/-20.6 deg. Use 90% of it as the controller's warning envelope.
 fov_horizontal_limit_deg: 23.94
 fov_vertical_limit_deg: 18.54
-fov_barrier_gain: 0.20
-fov_barrier_max: 4.0
+# The base interception equations are untouched inside the central 50% of the
+# usable image area. Outside it, an independent bounded barrier-gradient term
+# is added to yaw rate and vertical speed; it never multiplies the base gains.
+fov_guard_center_area_ratio: 0.50
+# These gains affect only the extra guard terms; they do not change k_yaw,
+# k_yaw_d, k_z_ff or N_nav_z. The channels are separate because their units
+# differ: rad/s for yaw rate and m/s for vertical speed.
+fov_guard_yaw_gain_radps: 0.20
+fov_guard_vertical_gain_mps: 0.20
+fov_guard_shape_max: 4.0
 # Keep forward closing speed unchanged. The FOV term corrects yaw and vertical
 # motion but does not slow the interceptor, which avoids delaying interception.
 fov_slowdown_start_ratio: 0.99
@@ -96,7 +103,7 @@ gamma_kalman_r: 0.0002
 
 # Optional diagnostics (Vector3Stamped)
 # los_world: x/y/z unit LOS in the MAVROS local frame
-# fov_state: x=horizontal ratio, y=vertical ratio, z=barrier scale
+# fov_state: x=horizontal ratio, y=vertical ratio, z=max dimensionless guard shape
 los_debug_topic: /fixed_camera_ibvs/los_world
 fov_debug_topic: /fixed_camera_ibvs/fov_state
 nominal_command_debug_topic: /fixed_camera_ibvs/nominal_pn_cmd

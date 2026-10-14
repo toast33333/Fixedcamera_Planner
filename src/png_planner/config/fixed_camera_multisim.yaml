@@ -41,8 +41,11 @@ vertical_integrator_decay: 0.98
 
 fov_horizontal_limit_deg: 23.94
 fov_vertical_limit_deg: 18.54
-fov_barrier_gain: 0.20
-fov_barrier_max: 4.0
+# Additive FOV guard: exactly zero in the central 50% of usable image area.
+fov_guard_center_area_ratio: 0.50
+fov_guard_yaw_gain_radps: 0.20
+fov_guard_vertical_gain_mps: 0.20
+fov_guard_shape_max: 4.0
 fov_slowdown_start_ratio: 0.99
 fov_min_forward_speed_ratio: 1.0
 fov_emergency_yaw_ratio: 0.85

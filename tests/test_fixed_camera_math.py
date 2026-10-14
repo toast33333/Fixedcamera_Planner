@@ -31,10 +31,19 @@ def rotate_body_pitch(vector, pitch):
     )
 
 
-def fov_barrier_scale(ratio, gain=0.2, maximum=4.0):
-    limited = max(0.0, min(ratio, 0.999))
-    scale = 1.0 + gain * limited * limited / max(1.0 - limited * limited, 1e-3)
-    return max(1.0, min(scale, maximum))
+def fov_barrier_shape(pixel_error, view_half_extent, area_ratio=0.5,
+                      maximum_shape=4.0):
+    inactive_fraction = math.sqrt(area_ratio)
+    normalized_position = abs(pixel_error) / view_half_extent
+    if normalized_position <= inactive_fraction:
+        return 0.0
+    progress = max(0.0, min(
+        (normalized_position - inactive_fraction) /
+        (1.0 - inactive_fraction),
+        0.999,
+    ))
+    shape = progress ** 2 / max(1.0 - progress ** 2, 1e-3)
+    return min(shape, maximum_shape)
 
 
 def angular_ratio(angle_deg, half_angle_limit_deg):
@@ -83,11 +92,32 @@ class FixedCameraMathTest(unittest.TestCase):
         self.assertAlmostEqual(inertial_bearing, 0.0, places=12)
         self.assertAlmostEqual(current_body_bearing, -current_yaw, places=12)
 
-    def test_fov_barrier_is_monotonic_and_bounded(self):
-        values = [fov_barrier_scale(ratio) for ratio in (0.0, 0.5, 0.8, 0.95, 1.2)]
+    def test_fov_barrier_is_zero_in_central_half_area(self):
+        half_view = 320.0
+        inactive_half_width = half_view * math.sqrt(0.5)
+
+        self.assertEqual(fov_barrier_shape(0.0, half_view), 0.0)
+        self.assertEqual(
+            fov_barrier_shape(inactive_half_width, half_view), 0.0)
+        self.assertGreater(
+            fov_barrier_shape(inactive_half_width + 1.0, half_view), 0.0)
+
+    def test_additive_fov_barrier_is_monotonic_and_bounded(self):
+        half_view = 320.0
+        values = [fov_barrier_shape(half_view * ratio, half_view)
+                  for ratio in (0.0, 0.70, 0.8, 0.95, 1.2)]
         self.assertEqual(values, sorted(values))
-        self.assertEqual(values[0], 1.0)
+        self.assertEqual(values[0], 0.0)
         self.assertLessEqual(values[-1], 4.0)
+
+    def test_central_guard_rectangle_has_half_the_view_area(self):
+        half_width = 320.0
+        half_height = 240.0
+        fraction = math.sqrt(0.5)
+        central_area = (2.0 * half_width * fraction) * (
+            2.0 * half_height * fraction)
+        full_area = (2.0 * half_width) * (2.0 * half_height)
+        self.assertAlmostEqual(central_area / full_area, 0.5)
 
     def test_measured_half_angles_are_the_constraint_boundaries(self):
         self.assertAlmostEqual(angular_ratio(26.6, 26.6), 1.0)

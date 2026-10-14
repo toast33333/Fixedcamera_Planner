@@ -220,6 +220,9 @@ def main():
         number(row, "fov_correction_yaw_rate") for row in post_handover)
     correction_vertical = finite(
         number(row, "fov_correction_vz") for row in post_handover)
+    guard_shapes = finite(
+        number(row, "fov_guard_shape") for row in post_handover
+        if "fov_guard_shape" in row)
     nominal_linear_rms = rms_or_nan(nominal_linear)
     correction_linear_rms = rms_or_nan(correction_linear)
     nominal_yaw_rms = rms_or_nan(nominal_yaw)
@@ -312,10 +315,9 @@ def main():
             len(settled_post_handover_fov_ratios)
             if settled_post_handover_fov_ratios else 0.0),
         "post_handover_fov_guard_active_percent": (
-            100.0 * sum(value >= params.get("fov_slowdown_start_ratio", 0.65)
-                        for value in post_handover_fov_ratios) /
-            len(post_handover_fov_ratios)
-            if post_handover_fov_ratios else 0.0),
+            100.0 * sum(value > 1e-9 for value in guard_shapes) /
+            len(guard_shapes)
+            if guard_shapes else 0.0),
         "fov_correction_linear_rms_mps": correction_linear_rms,
         "nominal_pn_linear_rms_mps": nominal_linear_rms,
         "fov_correction_linear_ratio_percent": (

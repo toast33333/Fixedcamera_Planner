@@ -25,8 +25,10 @@
   <arg name="target_disturbance_std_z_mps" default="0.0" />
   <arg name="visual_disturbance_std_px" default="0.0" />
   <arg name="detection_range_m" default="120.0" />
-  <arg name="fov_barrier_gain" default="0.20" />
-  <arg name="fov_barrier_max" default="4.0" />
+  <arg name="fov_guard_center_area_ratio" default="0.50" />
+  <arg name="fov_guard_yaw_gain_radps" default="0.20" />
+  <arg name="fov_guard_vertical_gain_mps" default="0.20" />
+  <arg name="fov_guard_shape_max" default="4.0" />
   <arg name="fov_slowdown_start_ratio" default="0.99" />
   <arg name="fov_min_forward_speed_ratio" default="1.0" />
   <arg name="fov_emergency_yaw_ratio" default="0.85" />
@@ -74,8 +76,10 @@
     <param name="forward_speed_accel_limit_mps2" value="$(arg forward_speed_accel_limit_mps2)" />
     <param name="enable_horizontal_control" value="$(arg enable_horizontal_control)" />
     <param name="enable_height_control" value="$(arg enable_height_control)" />
-    <param name="fov_barrier_gain" value="$(arg fov_barrier_gain)" />
-    <param name="fov_barrier_max" value="$(arg fov_barrier_max)" />
+    <param name="fov_guard_center_area_ratio" value="$(arg fov_guard_center_area_ratio)" />
+    <param name="fov_guard_yaw_gain_radps" value="$(arg fov_guard_yaw_gain_radps)" />
+    <param name="fov_guard_vertical_gain_mps" value="$(arg fov_guard_vertical_gain_mps)" />
+    <param name="fov_guard_shape_max" value="$(arg fov_guard_shape_max)" />
     <param name="fov_slowdown_start_ratio" value="$(arg fov_slowdown_start_ratio)" />
     <param name="fov_min_forward_speed_ratio" value="$(arg fov_min_forward_speed_ratio)" />
     <param name="fov_emergency_yaw_ratio" value="$(arg fov_emergency_yaw_ratio)" />

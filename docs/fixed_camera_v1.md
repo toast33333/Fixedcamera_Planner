@@ -73,20 +73,28 @@ existing velocity interface:
 - the desired LOS defaults to the optical center;
 - the measured half-angle limits are used directly: horizontal `+/-26.6 deg`
   and vertical `+/-20.6 deg` (full FOV `53.2 x 41.2 deg`);
-- horizontal and vertical logarithmic barrier terms are evaluated separately;
-- control gain grows as predicted LOS approaches either boundary;
+- the base interception equations are unchanged in the central 50% of the
+  usable image area;
+- horizontal and vertical additive guard terms are evaluated separately only
+  outside that central region;
+- the guard magnitude grows smoothly as predicted LOS approaches a boundary;
 - yaw control bypasses the normal speed gate near the boundary;
-- forward speed decreases near the boundary to leave time for recentering.
+- forward speed can optionally decrease near the boundary to leave time for
+  recentering (disabled by the current `fov_min_forward_speed_ratio: 1.0`).
 
 The debug topic `/fixed_camera_ibvs/fov_state` publishes horizontal ratio,
-vertical ratio and applied barrier scale. A ratio of `1.0` is the configured
-safe boundary.
+vertical ratio and the maximum dimensionless guard shape. A horizontal or
+vertical ratio of `1.0` is the configured warning boundary.
 
-For each axis, `rho` is the absolute predicted image angle divided by its
-half-angle limit. The implemented gain multiplier is
-`1 + k * rho^2 / (1 - rho^2)`, capped by `fov_barrier_max` to respect actuator
-limits. This is the rectangular, axis-wise form of the paper's logarithmic
-barrier idea. `rho = 1` represents the measured usable FOV boundary.
+For each axis, `rho` is the absolute predicted pixel error divided by the
+physical usable half-extent. Let `a = sqrt(fov_guard_center_area_ratio)` and
+`q = clip((rho-a)/(1-a), 0, 0.999)`. The guard is exactly zero for `rho <= a`.
+Outside it, the additive magnitude is
+`gain * min(q^2/(1-q^2), fov_guard_shape_max)`. The two independent gains are
+`fov_guard_yaw_gain_radps` and `fov_guard_vertical_gain_mps`, so yaw and vertical
+tuning have explicit units. The sign points toward the image center, and the
+result is added to the base yaw-rate or vertical-speed command rather than
+multiplying any base interception gain.
 
 ## Important limitation
 
