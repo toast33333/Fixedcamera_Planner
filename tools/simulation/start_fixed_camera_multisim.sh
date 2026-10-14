@@ -129,6 +129,7 @@ rosbag record --duration=90 -O "$run_dir/experiment.bag" \
   /target/mavros/local_position/velocity_local \
   /interceptor/mavros/setpoint_velocity/cmd_vel \
   /target/mavros/setpoint_velocity/cmd_vel \
+  /object_detections \
   /object_kcf \
   /fixed_camera_ibvs/los_world \
   /fixed_camera_ibvs/fov_state \

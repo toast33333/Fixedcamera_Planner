@@ -111,8 +111,9 @@ private:
         nh.param<std::string>("forward_speed_topic", forward_speed_topic_,
                               "/fixed_camera_ibvs/forward_speed_setpoint");
 
-        nh.param("detection_mode", detection_mode_, 0);
-        nh.param<std::string>("detection_topic", detection_topic_, "/object_kcf");
+        nh.param("detection_mode", detection_mode_, 1);
+        nh.param<std::string>("detection_topic", detection_topic_,
+                              "/object_detections");
         nh.param("minimum_detection_score", minimum_detection_score_, 0.0);
         nh.param("bbox_center_is_offset", bbox_center_is_offset_, true);
         nh.param("cx", cx_, 480.0);
@@ -1399,7 +1400,7 @@ private:
     std::string final_command_topic_;
     std::string forward_speed_topic_;
 
-    int detection_mode_ = 0;
+    int detection_mode_ = 1;
     double minimum_detection_score_ = 0.0;
     bool bbox_center_is_offset_ = true;
     double cx_ = 480.0;

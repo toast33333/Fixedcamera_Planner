@@ -29,8 +29,9 @@ def main():
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 640)
     cap.set(cv2.CAP_PROP_FPS, 120)
 
-    def wrapped_func(rknn_lite, frame):
-        return myFunc(rknn_lite, frame, publisher)  # 传递ROS1发布者
+    def wrapped_func(rknn_lite, frame_packet):
+        frame, capture_stamp = frame_packet
+        return myFunc(rknn_lite, frame, publisher, capture_stamp)
 
     modelPath = "/home/firefly/catkin_ws/src/detection_msgs/rknnModel/yolov8-NewDrone.rknn"
     TPEs = 3
@@ -48,7 +49,10 @@ def main():
                 cap.release()
                 del pool
                 return
-            pool.put(frame)
+            # Timestamp the frame before it enters the asynchronous inference
+            # queue. The output message keeps this acquisition time instead of
+            # the later inference/publication time.
+            pool.put((frame, rospy.Time.now()))
 
     # 4. 主循环：处理帧并发布消息
     frames, loopTime, initTime = 0, time.time(), time.time()
@@ -58,7 +62,7 @@ def main():
             ret, frame = cap.read()
             if not ret:
                 break
-            pool.put(frame)
+            pool.put((frame, rospy.Time.now()))
             frame, flag = pool.get()
             if flag is False:
                 break

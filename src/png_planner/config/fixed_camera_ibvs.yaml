@@ -1,6 +1,7 @@
-# Visual interface (unchanged from the existing controller)
-detection_mode: 0
-detection_topic: /object_kcf
+# Timestamped visual input. Detection.header.stamp is the camera acquisition
+# time and is used to interpolate the matching IMU attitude.
+detection_mode: 1
+detection_topic: /object_detections
 minimum_detection_score: 0.0
 bbox_center_is_offset: true
 y_up_positive: true
@@ -73,17 +74,14 @@ fov_emergency_yaw_ratio: 0.85
 
 # Attitude and image-delay compensation
 enable_attitude_compensation: true
-# Original PX4 launch may accept pose orientation as a redundant source. The
-# INSLIB launch overrides this to false so one timestamped attitude stream owns
-# the interpolation history.
-use_pose_orientation: true
+# Use only the timestamped IMU orientation history for visual/attitude alignment.
+use_pose_orientation: false
 # Optional estimator-health gate. The original PX4-state launch keeps this
 # disabled; the INSLIB launch overrides it to true and stops on stale/invalid
 # navigation state instead of continuing with an old attitude.
 enable_state_valid_topic: false
 state_valid_topic: /inslib/state_valid
 state_valid_timeout_sec: 0.15
-image_delay_sec: 0.08
 max_los_prediction_sec: 0.25
 pose_history_sec: 1.0
 lost_timeout: 0.30

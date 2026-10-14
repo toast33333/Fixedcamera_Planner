@@ -531,7 +531,7 @@ def draw_footer(canvas, rows, times, now, params):
                fov_title, CYAN, fixed_max=1.10,
                threshold=1.0)
     text(canvas,
-         "Synthetic visual projection; production /object_kcf interface unchanged.",
+         "Synthetic visual projection; timestamped /object_detections interface.",
          (38, 1046), 0.34, MUTED, 1)
 
 

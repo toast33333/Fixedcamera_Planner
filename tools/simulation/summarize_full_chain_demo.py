@@ -499,7 +499,7 @@ def write_markdown(batch_dir, records, rows, tier_rows=None):
         "# 雷达抵近—固定相机拦截完整链路验证（简表）",
         "",
         "> 口径：双PX4 SITL + Gazebo Classic + 实际ROS制导控制节点，属于软件在环验证。",
-        "> 视觉检测由真值几何投影生成，但接口保持 `/object_kcf` + `kcf_msgs/Bbox` 不变。",
+        "> 视觉检测由真值几何投影生成，使用带采集时间戳的 `/object_detections` + `detection_msgs/Detection` 接口。",
         "",
         "## 表1  各档实验条件",
         "",

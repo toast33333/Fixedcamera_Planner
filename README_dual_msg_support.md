@@ -39,6 +39,10 @@ track_id
 is_tracking
 ```
 
+此外，`detection_msgs/Detection` 带有 `std_msgs/Header header`。固定相机控制器
+使用 `header.stamp` 将图像帧与同一时刻的 IMU 姿态对齐；`kcf_msgs/Bbox` 仅作为
+无时间戳的旧接口保留。
+
 统一参数：
 
 - `detection_mode`

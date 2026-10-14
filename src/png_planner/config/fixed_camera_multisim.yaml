@@ -1,7 +1,7 @@
 # Controller settings used only by the two-PX4 Gazebo platform-validation run.
-# The detector topic and message type remain identical to the real code.
-detection_mode: 0
-detection_topic: /object_kcf
+# The timestamped Detection interface is identical to the field code.
+detection_mode: 1
+detection_topic: /object_detections
 minimum_detection_score: 0.0
 bbox_center_is_offset: true
 y_up_positive: true
@@ -51,7 +51,7 @@ fov_min_forward_speed_ratio: 1.0
 fov_emergency_yaw_ratio: 0.85
 
 enable_attitude_compensation: true
-image_delay_sec: 0.0
+use_pose_orientation: false
 max_los_prediction_sec: 0.20
 pose_history_sec: 1.0
 lost_timeout: 0.30

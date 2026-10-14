@@ -2,8 +2,8 @@
   <arg name="inslib_config" default="$(find png_planner)/config/inslib_fixed_camera.yaml" />
   <arg name="ibvs_config" default="$(find png_planner)/config/fixed_camera_ibvs.yaml" />
   <arg name="approach_config" default="$(find png_planner)/config/radar_approach_handover.yaml" />
-  <arg name="detection_mode" default="0" />
-  <arg name="detection_topic" default="/object_kcf" />
+  <arg name="detection_mode" default="1" />
+  <arg name="detection_topic" default="/object_detections" />
 
   <node pkg="png_planner"
         type="inslib_state_estimator"

@@ -1,8 +1,8 @@
 <launch>
   <arg name="inslib_config" default="$(find png_planner)/config/inslib_fixed_camera.yaml" />
   <arg name="ibvs_config" default="$(find png_planner)/config/fixed_camera_ibvs.yaml" />
-  <arg name="detection_mode" default="0" />
-  <arg name="detection_topic" default="/object_kcf" />
+  <arg name="detection_mode" default="1" />
+  <arg name="detection_topic" default="/object_detections" />
   <arg name="enable_horizontal_control" default="true" />
   <arg name="enable_height_control" default="true" />
   <arg name="forward_speed_mps" default="5.0" />

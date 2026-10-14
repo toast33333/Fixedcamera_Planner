@@ -16,8 +16,8 @@ forward_speed_topic: /fixed_camera_ibvs/forward_speed_setpoint
 # the target-box centre stays inside a centred rectangle whose area is 40% of
 # the full image area. The rectangle keeps the image aspect ratio, so each
 # linear dimension is sqrt(0.40) of the full image dimension.
-detection_mode: 0
-detection_topic: /object_kcf
+detection_mode: 1
+detection_topic: /object_detections
 minimum_detection_score: 0.0
 bbox_center_is_offset: true
 cx: 480.0

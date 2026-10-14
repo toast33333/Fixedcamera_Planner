@@ -76,15 +76,16 @@ public:
 
         last_control_time_ = ros::Time::now();
         ROS_INFO("[FixedCameraIBVS] Started: fixed camera, attitude-compensated LOS, FOV barrier.");
-        ROS_INFO("[FixedCameraIBVS] Visual input unchanged; detection mode=%d topic=%s.",
+        ROS_INFO("[FixedCameraIBVS] Visual input: detection mode=%d topic=%s.",
                  detection_mode_, detection_topic_.c_str());
         ROS_INFO("[FixedCameraIBVS] Control axes: horizontal yaw/FOV=%s, "
                  "lateral PN velocity=removed, vertical=%s.",
                  enable_horizontal_control_ ? "enabled" : "disabled",
                  enable_height_control_ ? "enabled" : "disabled");
-        ROS_INFO("[FixedCameraIBVS] Pose=%s, image delay=%.3f s, "
+        ROS_INFO("[FixedCameraIBVS] Pose=%s; detection capture timestamps are "
+                 "aligned to IMU history (no fixed image-delay estimate). "
                  "FOV limits: horizontal +/-%.1f deg, vertical +/-%.1f deg.",
-                 pose_topic_.c_str(), image_delay_sec_,
+                 pose_topic_.c_str(),
                  fov_horizontal_limit_deg_, fov_vertical_limit_deg_);
         ROS_INFO("[FixedCameraIBVS] Additive FOV guard: inactive in central "
                  "%.1f%% image area; yaw gain=%.2f rad/s, vertical gain=%.2f "
@@ -121,8 +122,8 @@ public:
                 continue;
             }
 
-            const bool target_valid =
-                have_detection_ && (now - last_detection_time_).toSec() <= lost_timeout_sec_;
+            const bool target_valid = have_detection_ &&
+                (now - last_detection_receipt_time_).toSec() <= lost_timeout_sec_;
 
             if (target_valid && detection_sequence_ != processed_detection_sequence_) {
                 processDetectionMeasurement();
@@ -218,7 +219,6 @@ private:
         nh.param("use_real_dt", use_real_dt_, true);
         nh.param("step_dt", step_dt_, 0.02);
         nh.param("lost_timeout", lost_timeout_sec_, 0.30);
-        nh.param("image_delay_sec", image_delay_sec_, 0.08);
         nh.param("max_los_prediction_sec", max_los_prediction_sec_, 0.25);
         nh.param("pose_history_sec", pose_history_sec_, 1.0);
         nh.param("enable_attitude_compensation", enable_attitude_compensation_, true);
@@ -248,8 +248,9 @@ private:
         nh.param("gamma_kalman_q_rate", gamma_q_rate_, gamma_tuning.q_rate);
         nh.param("gamma_kalman_r", gamma_r_, gamma_tuning.r_measurement);
 
-        nh.param("detection_mode", detection_mode_, 0);
-        nh.param<std::string>("detection_topic", detection_topic_, "/object_kcf");
+        nh.param("detection_mode", detection_mode_, 1);
+        nh.param<std::string>("detection_topic", detection_topic_,
+                              "/object_detections");
         if (detection_mode_ == 1 && detection_topic_ == "/object_kcf") {
             detection_topic_ = "/object_detections";
         }
@@ -302,9 +303,8 @@ private:
         control_rate_hz_ = std::max(control_rate_hz_, 1.0);
         step_dt_ = std::max(step_dt_, 1e-3);
         lost_timeout_sec_ = std::max(lost_timeout_sec_, 0.02);
-        image_delay_sec_ = std::max(image_delay_sec_, 0.0);
         max_los_prediction_sec_ = std::max(max_los_prediction_sec_, 0.0);
-        pose_history_sec_ = std::max(pose_history_sec_, image_delay_sec_ + 0.2);
+        pose_history_sec_ = std::max(pose_history_sec_, 0.2);
     }
 
     void configureCameraMount() {
@@ -419,11 +419,16 @@ private:
             centered_u / fx_, optical_v / fy_, 1.0);
         const tf::Vector3 los_body_at_capture = cameraRayToBody(camera_ray);
 
-        const ros::Time capture_time =
-            last_detection_time_ - ros::Duration(image_delay_sec_);
+        const ros::Time capture_time = last_detection_capture_time_;
         tf::Quaternion capture_attitude = current_attitude_;
         if (enable_attitude_compensation_) {
-            lookupAttitude(capture_time, capture_attitude);
+            if (!lookupAttitude(capture_time, capture_attitude)) {
+                ROS_WARN_THROTTLE(
+                    1.0,
+                    "[FixedCameraIBVS] No IMU attitude available for the "
+                    "detection timestamp; dropping this visual measurement.");
+                return;
+            }
         } else {
             capture_attitude.setRPY(0.0, 0.0, 0.0);
         }
@@ -816,7 +821,9 @@ private:
     }
 
     template <typename Message>
-    void acceptDetection(const Message& message) {
+    void acceptDetection(const Message& message,
+                         const ros::Time& capture_stamp) {
+        const ros::Time receipt_time = ros::Time::now();
         last_detection_.x1 = message.x1;
         last_detection_.y1 = message.y1;
         last_detection_.x2 = message.x2;
@@ -825,19 +832,36 @@ private:
         last_detection_.class_name = message.class_name;
         last_detection_.track_id = message.track_id;
         last_detection_.is_tracking = message.is_tracking;
-        last_detection_time_ = ros::Time::now();
+        last_detection_receipt_time_ = receipt_time;
+        last_detection_capture_time_ = capture_stamp;
+        if (last_detection_capture_time_.isZero()) {
+            last_detection_capture_time_ = receipt_time;
+            ROS_WARN_THROTTLE(
+                2.0,
+                "[FixedCameraIBVS] Detection header stamp is zero; using "
+                "receipt time without a fixed delay estimate.");
+        } else if (last_detection_capture_time_ >
+                   receipt_time + ros::Duration(0.05)) {
+            ROS_WARN_THROTTLE(
+                2.0,
+                "[FixedCameraIBVS] Detection timestamp is in the future; "
+                "check ROS clock synchronization. Using receipt time.");
+            last_detection_capture_time_ = receipt_time;
+        }
         have_detection_ =
             message.is_tracking && message.score >= minimum_detection_score_;
         ++detection_sequence_;
     }
 
     void detectionCallbackKcf(const kcf_msgs::Bbox::ConstPtr& message) {
-        acceptDetection(*message);
+        // Legacy Bbox has no Header. Keep it usable, but it can only align to
+        // receipt time and therefore receives no assumed 0.08 s correction.
+        acceptDetection(*message, ros::Time::now());
     }
 
     void detectionCallbackDetection(
         const detection_msgs::Detection::ConstPtr& message) {
-        acceptDetection(*message);
+        acceptDetection(*message, message->header.stamp);
     }
 
     void recordAttitude(const geometry_msgs::Quaternion& orientation,
@@ -956,7 +980,6 @@ private:
     bool use_real_dt_ = true;
     double step_dt_ = 0.02;
     double lost_timeout_sec_ = 0.30;
-    double image_delay_sec_ = 0.08;
     double max_los_prediction_sec_ = 0.25;
     double pose_history_sec_ = 1.0;
     bool enable_attitude_compensation_ = true;
@@ -977,7 +1000,7 @@ private:
     bool have_world_los_ = false;
     ros::Time last_measurement_time_;
 
-    int detection_mode_ = 0;
+    int detection_mode_ = 1;
     std::string detection_topic_;
     std::string pose_topic_;
     std::string attitude_topic_;
@@ -990,7 +1013,8 @@ private:
     std::string state_valid_topic_;
 
     DetectionData last_detection_;
-    ros::Time last_detection_time_;
+    ros::Time last_detection_receipt_time_;
+    ros::Time last_detection_capture_time_;
     std::uint64_t detection_sequence_ = 0;
     std::uint64_t processed_detection_sequence_ = 0;
     bool have_detection_ = false;

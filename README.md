@@ -10,9 +10,9 @@ The fixed-camera controller keeps the existing visual interfaces:
 - `kcf_msgs/Bbox` on `/object_kcf`
 - `detection_msgs/Detection` on `/object_detections`
 
-It adds quaternion-based aircraft-attitude compensation, configurable image
-delay compensation, inertial LOS-rate estimation, and a paper-inspired FOV
-barrier while continuing to publish
+It adds quaternion-based aircraft-attitude compensation, timestamp-based
+alignment between each detection frame and the IMU attitude history, inertial
+LOS-rate estimation, and a paper-inspired FOV barrier while continuing to publish
 `geometry_msgs/TwistStamped` on `/mavros/setpoint_velocity/cmd_vel`.
 
 The active FOV constraints use the measured test-aircraft half angles directly:
@@ -29,12 +29,16 @@ source devel/setup.bash
 roslaunch png_planner fixed_camera_ibvs.launch
 ```
 
-For `detection_msgs/Detection`:
+The fixed-camera launch now defaults to the timestamped
+`detection_msgs/Detection` interface:
 
 ```bash
 roslaunch png_planner fixed_camera_ibvs.launch \
   detection_mode:=1 detection_topic:=/object_detections
 ```
+
+`Detection.header.stamp` must be set when the camera frame is acquired, before
+asynchronous inference. No fixed image-delay estimate is used.
 
 Configuration is in `src/png_planner/config/fixed_camera_ibvs.yaml`. Design,
 calibration order, and current limitations are documented in

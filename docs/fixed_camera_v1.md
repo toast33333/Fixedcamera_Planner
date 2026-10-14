@@ -12,14 +12,14 @@ Image-based Visual Servoing*, arXiv:2404.08296.
 ## Data flow
 
 ```text
-kcf_msgs/Bbox or detection_msgs/Detection
+detection_msgs/Detection.header.stamp = camera acquisition time
                   |
                   v
-       camera optical LOS at t-delay
+       camera optical LOS at t_capture
                   |
        fixed camera-to-body transform
                   |
-       MAVROS attitude history at t-delay
+       interpolate IMU attitude at t_capture
                   |
                   v
         inertial LOS + LOS angular rate
@@ -43,9 +43,9 @@ in that inertial frame, so aircraft yaw, pitch and roll do not appear as target
 motion. The estimated inertial LOS is then transformed back with the current
 attitude to obtain the LOS that the fixed camera should see now.
 
-The attitude history is fed by `/mavros/imu/data` and also accepts
-`/mavros/local_position/pose` as a fallback. Both topics carry the flight
-controller attitude through MAVROS; no raw MAVLink parser is needed.
+The attitude history is fed by `/mavros/imu/data`. The detector and IMU must
+use the same ROS time domain; if they run on different computers, their clocks
+must be synchronized (for example with chrony/PTP).
 
 ## Fixed camera coordinate convention
 
@@ -60,9 +60,11 @@ controller attitude through MAVROS; no raw MAVLink parser is needed.
 The center optical ray therefore points in body coordinates approximately as
 `[cos(20 deg), 0, sin(20 deg)] = [0.9397, 0, 0.3420]`.
 
-`image_delay_sec` selects the attitude-history sample associated with the image.
-This preserves the headerless visual messages while providing a practical
-delay correction. Accurate calibration of this delay is important.
+The controller reads `Detection.header.stamp` and interpolates the IMU
+quaternion at that exact acquisition time. Inference and ROS transport latency
+may vary without requiring a manually estimated `image_delay_sec`. The legacy
+headerless `/object_kcf` input remains available only as a compatibility path;
+it falls back to message receipt time and receives no assumed delay correction.
 
 ## FOV constraint
 
@@ -113,6 +115,7 @@ confirmed.
 3. Calibrate camera mount roll/pitch/yaw corrections.
 4. Rotate the aircraft on the ground and confirm `los_world` remains nearly
    fixed for a stationary target.
-5. Calibrate `image_delay_sec` using timestamped logs.
+5. Verify `/object_detections/header/stamp` and `/mavros/imu/data/header/stamp`
+   use the same synchronized ROS clock.
 6. Start with low `V_default`, `max_yaw_rate`, and `max_vz` in SITL/tethered
    tests before outdoor interception.

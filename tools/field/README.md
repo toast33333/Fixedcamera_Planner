@@ -25,9 +25,14 @@ FORWARD_SPEED_MPS=11.5 ./tools/field/start_intercept_full.sh
 
 - `STATE_SOURCE=px4`：直接使用 MAVROS/PX4 状态，默认值。
 - `STATE_SOURCE=inslib`：同时启动 INSLIB 状态估计器。
-- `DETECTION_TOPIC=/object_kcf`：视觉检测话题。
+- `DETECTION_TOPIC=/object_detections`：带采集时间戳的视觉检测话题。
+- `DETECTION_MODE=1`：使用 `detection_msgs/Detection`，默认值。
 - `MAVROS_STATE_TOPIC=/mavros/state`：飞控连接状态话题。
 - `PREFLIGHT_TIMEOUT_S=10`：启动前等待状态和视觉消息的最长时间。
 - `WS_DIR=...`：ROS 工作空间根目录；默认按仓库所在位置自动推导。
+
+视觉节点应在相机帧读出时填写 `Detection.header.stamp`，不要填写推理完成
+或消息发布时刻。视觉计算机与 MAVROS/IMU 若不在同一台主机上，必须先用
+chrony、PTP 等方式同步系统时钟。
 
 仅在台架调试且明确知道风险时，才可设置 `SKIP_PREFLIGHT_CHECKS=1` 跳过飞控连接和视觉跟踪检查。

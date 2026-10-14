@@ -24,6 +24,9 @@
   <arg name="target_disturbance_std_xy_mps" default="0.0" />
   <arg name="target_disturbance_std_z_mps" default="0.0" />
   <arg name="visual_disturbance_std_px" default="0.0" />
+  <arg name="visual_delay_mean_sec" default="0.0" />
+  <arg name="visual_delay_jitter_std_sec" default="0.0" />
+  <arg name="visual_dropout_probability" default="0.0" />
   <arg name="detection_range_m" default="120.0" />
   <arg name="fov_guard_center_area_ratio" default="0.50" />
   <arg name="fov_guard_yaw_gain_radps" default="0.20" />
@@ -127,5 +130,8 @@
     <param name="target_disturbance_std_xy_mps" value="$(arg target_disturbance_std_xy_mps)" />
     <param name="target_disturbance_std_z_mps" value="$(arg target_disturbance_std_z_mps)" />
     <param name="visual_disturbance_std_px" value="$(arg visual_disturbance_std_px)" />
+    <param name="visual_delay_mean_sec" value="$(arg visual_delay_mean_sec)" />
+    <param name="visual_delay_jitter_std_sec" value="$(arg visual_delay_jitter_std_sec)" />
+    <param name="visual_dropout_probability" value="$(arg visual_dropout_probability)" />
   </node>
 </launch>

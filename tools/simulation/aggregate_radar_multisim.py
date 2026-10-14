@@ -127,7 +127,7 @@ def build_report(batch_dir, records):
         "",
         "这里的“拦截成功”定义为两机三维距离不大于 5 m；Gazebo 中未建模碰撞毁伤。"
         "视觉输入由真实相对位姿投影生成，但消息类型、话题和控制器入口保持为"
-        " `/object_kcf` + `kcf_msgs/Bbox`，因此本报告验证的是制导与控制链路，"
+        " `/object_detections` + `detection_msgs/Detection`，并携带图像采集时间戳，"
         "不是目标检测算法本身的识别率。",
         "",
         "## 工况与结果",

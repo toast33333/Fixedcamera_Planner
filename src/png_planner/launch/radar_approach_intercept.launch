@@ -1,11 +1,11 @@
 <launch>
   <arg name="ibvs_config" default="$(find png_planner)/config/fixed_camera_ibvs.yaml" />
   <arg name="approach_config" default="$(find png_planner)/config/radar_approach_handover.yaml" />
-  <arg name="detection_mode" default="0" />
-  <arg name="detection_topic" default="/object_kcf" />
+  <arg name="detection_mode" default="1" />
+  <arg name="detection_topic" default="/object_detections" />
 
-  <!-- Existing visual controller: visual inputs are unchanged. Its output is
-       a candidate only, so it cannot conflict with the approach command. -->
+  <!-- The timestamped visual controller output is a candidate only, so it
+       cannot conflict with the approach command. -->
   <node pkg="png_planner"
         type="fixed_camera_ibvs"
         name="fixed_camera_ibvs"

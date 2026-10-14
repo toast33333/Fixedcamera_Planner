@@ -184,7 +184,7 @@ def letterbox(im, new_shape=(640, 640), color=(0, 0, 0)):
     return im, ratio, (left, top)
 
 # 修改：ROS1发布逻辑
-def myFunc(rknn_lite, IMG, publisher):  # 接收ROS1发布者作为参数
+def myFunc(rknn_lite, IMG, publisher, capture_stamp):
     IMG2 = cv2.cvtColor(IMG, cv2.COLOR_BGR2RGB)
     IMG2, ratio, padding = letterbox(IMG2)
     IMG2 = np.expand_dims(IMG2, 0)
@@ -246,6 +246,8 @@ def myFunc(rknn_lite, IMG, publisher):  # 接收ROS1发布者作为参数
             
             # 发布ROS1消息
             msg = Detection()
+            msg.header.stamp = capture_stamp
+            msg.header.frame_id = "camera_optical"
             msg.x1 = x1_rel
             msg.y1 = y1_rel
             msg.x2 = x2_rel

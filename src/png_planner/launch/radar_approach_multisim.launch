@@ -117,7 +117,6 @@
   <arg name="nav_imu_delay_mean_sec" default="0.0" />
   <arg name="nav_imu_delay_jitter_std_sec" default="0.0" />
   <arg name="nav_imu_dropout_probability" default="0.0" />
-  <arg name="controller_image_delay_sec" default="0.0" />
   <arg name="detection_range_m" default="30.0" />
   <arg name="fov_guard_center_area_ratio" default="0.50" />
   <arg name="fov_guard_yaw_gain_radps" default="0.20" />
@@ -196,7 +195,8 @@
     <param name="imu_dropout_probability" value="$(arg nav_imu_dropout_probability)" />
   </node>
 
-  <!-- The production visual input remains /object_kcf with kcf_msgs/Bbox. -->
+  <!-- The production visual input uses timestamped
+       /object_detections with detection_msgs/Detection. -->
   <node if="$(arg start_ibvs)"
         pkg="png_planner"
         type="fixed_camera_ibvs"
@@ -213,7 +213,6 @@
     <param name="lost_forward_speed" value="0.0" />
     <param name="V_default" value="$(arg visual_forward_speed_mps)" />
     <param name="forward_speed_accel_limit_mps2" value="$(arg forward_speed_accel_limit_mps2)" />
-    <param name="image_delay_sec" value="$(arg controller_image_delay_sec)" />
     <param name="fov_guard_center_area_ratio" value="$(arg fov_guard_center_area_ratio)" />
     <param name="fov_guard_yaw_gain_radps" value="$(arg fov_guard_yaw_gain_radps)" />
     <param name="fov_guard_vertical_gain_mps" value="$(arg fov_guard_vertical_gain_mps)" />

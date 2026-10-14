@@ -10,8 +10,8 @@ DEFAULT_WS_DIR=$(cd "$REPO_DIR/../.." && pwd)
 MODE=${1:-}
 WS_DIR=${WS_DIR:-$DEFAULT_WS_DIR}
 STATE_SOURCE=${STATE_SOURCE:-px4}
-DETECTION_MODE=${DETECTION_MODE:-0}
-DETECTION_TOPIC=${DETECTION_TOPIC:-/object_kcf}
+DETECTION_MODE=${DETECTION_MODE:-1}
+DETECTION_TOPIC=${DETECTION_TOPIC:-/object_detections}
 MAVROS_STATE_TOPIC=${MAVROS_STATE_TOPIC:-/mavros/state}
 FORWARD_SPEED_MPS=${FORWARD_SPEED_MPS:-5.0}
 LOST_FORWARD_SPEED_MPS=${LOST_FORWARD_SPEED_MPS:-0.0}
@@ -106,6 +106,7 @@ echo "固定相机外场视觉控制器"
 echo "模式: $MODE_TEXT"
 echo "状态源: $STATE_SOURCE"
 echo "视觉话题: $DETECTION_TOPIC"
+echo "时间对齐: 使用图像采集 header.stamp 对齐 IMU，不使用固定延迟估计"
 echo "前向速度: $FORWARD_SPEED_MPS m/s"
 echo "丢失目标后的前向速度: $LOST_FORWARD_SPEED_MPS m/s"
 echo "日志目录: $ROS_LOG_DIR"

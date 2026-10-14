@@ -23,6 +23,7 @@ import cv2
 import numpy as np
 import rospy
 from cv_bridge import CvBridge
+from detection_msgs.msg import Detection
 from gazebo_msgs.msg import ModelStates
 from geometry_msgs.msg import Point, PoseStamped, TwistStamped, Vector3Stamped
 from kcf_msgs.msg import Bbox
@@ -302,7 +303,10 @@ class FixedCameraMultisimExperiment:
             self.interceptor_ns + "/setpoint_velocity/cmd_vel", TwistStamped, queue_size=10)
         self.target_cmd_pub = rospy.Publisher(
             self.target_ns + "/setpoint_velocity/cmd_vel", TwistStamped, queue_size=10)
-        self.detection_pub = rospy.Publisher("/object_kcf", Bbox, queue_size=10)
+        self.detection_pub = rospy.Publisher(
+            "/object_detections", Detection, queue_size=10)
+        self.legacy_bbox_pub = rospy.Publisher(
+            "/object_kcf", Bbox, queue_size=10)
         self.image_pub = rospy.Publisher("/fixed_camera_sim/image", Image, queue_size=2)
         self.status_pub = rospy.Publisher("/fixed_camera_sim/status", String, queue_size=5, latch=True)
         self.distance_pub = rospy.Publisher("/fixed_camera_sim/distance", Float32, queue_size=10)
@@ -755,7 +759,8 @@ class FixedCameraMultisimExperiment:
         if latest is not None:
             _, _, capture_time, projection = latest
             self.visual_last_delay = max(0.0, now.to_sec() - capture_time)
-            self.publish_detection_and_image(projection, now)
+            self.publish_detection_and_image(
+                projection, rospy.Time.from_sec(capture_time), now)
         if self.last_visual_delivery_time == rospy.Time(0):
             self.tracking = False
         elif (now - self.last_visual_delivery_time).to_sec() > self.visual_tracking_timeout:
@@ -772,7 +777,7 @@ class FixedCameraMultisimExperiment:
         return (self.phase == "STABILIZE" and not self.radar_guidance_enabled and
                 (now - self.phase_started).to_sec() >= 3.0)
 
-    def publish_detection_and_image(self, projection, now):
+    def publish_detection_and_image(self, projection, capture_stamp, now):
         distance, horizontal_distance, raw_visible, u_offset, v_offset, h_ratio, v_ratio = projection
         visible = raw_visible and self.detection_enabled_for_control(now)
         self.tracking = visible
@@ -781,23 +786,37 @@ class FixedCameraMultisimExperiment:
         self.pixel_u = u_offset
         self.pixel_v = v_offset
 
-        box = Bbox()
+        detection = Detection()
+        detection.header.stamp = capture_stamp
+        detection.header.frame_id = "camera_optical"
         if visible:
             half_size = clamp(180.0 / max(distance, 1.0), 8.0, 28.0)
-            box.x1 = u_offset - half_size
-            box.x2 = u_offset + half_size
-            box.y1 = v_offset - half_size
-            box.y2 = v_offset + half_size
-            box.score = 0.98
-            box.class_name = "target_uav"
-            box.track_id = 1
-            box.is_tracking = True
+            detection.x1 = u_offset - half_size
+            detection.x2 = u_offset + half_size
+            detection.y1 = v_offset - half_size
+            detection.y2 = v_offset + half_size
+            detection.score = 0.98
+            detection.class_name = "target_uav"
+            detection.track_id = 1
+            detection.is_tracking = True
         else:
-            box.score = 0.0
-            box.class_name = "target_uav"
-            box.track_id = 1
-            box.is_tracking = False
-        self.detection_pub.publish(box)
+            detection.score = 0.0
+            detection.class_name = "target_uav"
+            detection.track_id = 1
+            detection.is_tracking = False
+        self.detection_pub.publish(detection)
+
+        # Keep the headerless legacy topic available for old comparison nodes.
+        box = Bbox()
+        box.x1 = detection.x1
+        box.y1 = detection.y1
+        box.x2 = detection.x2
+        box.y2 = detection.y2
+        box.score = detection.score
+        box.class_name = detection.class_name
+        box.track_id = detection.track_id
+        box.is_tracking = detection.is_tracking
+        self.legacy_bbox_pub.publish(box)
 
         image = np.full((self.image_height, self.image_width, 3), 245, dtype=np.uint8)
         safe_half_width = int(round(self.fx * math.tan(math.radians(self.horizontal_limit_deg))))
@@ -820,7 +839,7 @@ class FixedCameraMultisimExperiment:
                     (22, self.image_height - 22), cv2.FONT_HERSHEY_SIMPLEX,
                     0.62, (0, 120, 0) if visible else (0, 0, 180), 2, cv2.LINE_AA)
         image_message = self.bridge.cv2_to_imgmsg(image, encoding="bgr8")
-        image_message.header.stamp = now
+        image_message.header.stamp = capture_stamp
         image_message.header.frame_id = "camera_optical"
         self.image_pub.publish(image_message)
 
