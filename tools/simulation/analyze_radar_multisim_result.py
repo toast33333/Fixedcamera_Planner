@@ -113,7 +113,7 @@ def linear_magnitude(row, prefix):
 def classify_failure(summary, params):
     if summary["success"]:
         if summary.get("approach_only", False):
-            return "达到理想交接位置并满足视觉连续居中条件"
+            return "进入交接距离区间并满足视觉区域及姿态稳定条件"
         return "进入 %.1f m 拦截判定半径" % params.get("capture_distance_m", 5.0)
     if not summary["chase_started"]:
         return "雷达滤波未完成初始化，未进入抵近阶段"
@@ -131,10 +131,10 @@ def classify_failure(summary, params):
                 summary["minimum_terminal_error_m"] > position_tolerance):
             return "未进入 %.1f m 交接位置容差，视觉控制未接管" % position_tolerance
         if summary["tracking_availability_percent"] < 20.0:
-            return "抵近末端未形成稳定视觉检测，未满足连续居中交接条件"
+            return "抵近末端未形成稳定视觉检测，未满足连续区域交接条件"
         if legacy_pose_gate:
-            return "位置、航向或连续居中检测条件未能同时满足，未发生视觉交接"
-        return "时限内未同时满足连续居中、雷达估计健康及运动稳定条件，未发生视觉交接"
+            return "位置、航向或连续区域检测条件未能同时满足，未发生视觉交接"
+        return "时限内未同时满足交接区间、视觉区域、雷达估计健康及姿态稳定条件"
     if (summary["post_handover_tracking_availability_percent"] < 70.0 or
             summary["post_handover_max_fov_ratio"] > 1.0):
         return "视觉交接后目标频繁越出可用视场，未在时限内闭合到拦截半径"

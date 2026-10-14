@@ -63,8 +63,14 @@ public:
             ros::Duration(1.0 / control_rate_hz_),
             &RadarApproachHandover::controlTimer, this);
 
-        ROS_INFO("[RadarApproach] Started. Radar period=%.1f s, terminal range=%.1f m.",
+        ROS_INFO("[RadarApproach] Started. Radar period=%.1f s, nominal terminal range=%.1f m.",
                  expected_radar_period_sec_, terminal_camera_range_m_);
+        ROS_INFO("[RadarApproach] Handover window: range %.1f..%.1f m, "
+                 "central image area %.1f%%, stable for %.2f s.",
+                 handover_min_estimated_range_m_,
+                 handover_max_estimated_range_m_,
+                 100.0 * handover_center_area_ratio_,
+                 handover_stable_duration_sec_);
         ROS_INFO("[RadarApproach] Command ownership: this node alone publishes %s.",
                  final_command_topic_.c_str());
     }
@@ -111,6 +117,10 @@ private:
         nh.param("bbox_center_is_offset", bbox_center_is_offset_, true);
         nh.param("cx", cx_, 480.0);
         nh.param("cy", cy_, 270.0);
+        nh.param("image_width_px", image_width_px_, 960.0);
+        nh.param("image_height_px", image_height_px_, 540.0);
+        nh.param("handover_center_area_ratio",
+                 handover_center_area_ratio_, 0.40);
         nh.param("center_tolerance_u_px", center_tolerance_u_px_, 40.0);
         nh.param("center_tolerance_v_px", center_tolerance_v_px_, 40.0);
         nh.param("detection_timeout_sec", detection_timeout_sec_, 0.30);
@@ -188,6 +198,20 @@ private:
                  visual_alignment_max_vz_mps_, 0.6);
         nh.param("visual_alignment_max_yaw_rate_radps",
                  visual_alignment_max_yaw_rate_radps_, 0.35);
+        nh.param("visual_stabilization_start_range_m",
+                 visual_stabilization_start_range_m_, 35.0);
+        nh.param("visual_terminal_correction_speed_mps",
+                 visual_terminal_correction_speed_mps_, 1.2);
+        nh.param("visual_terminal_acceleration_mps2",
+                 visual_terminal_acceleration_mps2_, 0.5);
+        double attitude_slowdown_start_deg = 8.0;
+        double attitude_slowdown_full_deg = 15.0;
+        nh.param("attitude_slowdown_start_deg",
+                 attitude_slowdown_start_deg, 8.0);
+        nh.param("attitude_slowdown_full_deg",
+                 attitude_slowdown_full_deg, 15.0);
+        attitude_slowdown_start_rad_ = degToRad(attitude_slowdown_start_deg);
+        attitude_slowdown_full_rad_ = degToRad(attitude_slowdown_full_deg);
         nh.param("closing_speed_margin_mps", closing_speed_margin_mps_, 2.0);
         nh.param("min_handover_forward_speed_mps",
                  min_handover_forward_speed_mps_, 3.0);
@@ -199,9 +223,9 @@ private:
         nh.param("use_legacy_pose_handover_gate",
                  use_legacy_pose_handover_gate_, false);
         nh.param("handover_min_estimated_range_m",
-                 handover_min_estimated_range_m_, 5.0);
+                 handover_min_estimated_range_m_, 10.0);
         nh.param("handover_max_estimated_range_m",
-                 handover_max_estimated_range_m_, 45.0);
+                 handover_max_estimated_range_m_, 30.0);
         nh.param("max_handover_velocity_std_mps",
                  max_handover_velocity_std_mps_, 1.0);
         nh.param("max_handover_radar_age_sec",
@@ -212,6 +236,13 @@ private:
                  max_handover_closing_speed_mps_, 2.0);
         nh.param("max_handover_opening_speed_mps",
                  max_handover_opening_speed_mps_, 0.5);
+        double max_handover_tilt_deg = 12.0;
+        nh.param("max_handover_tilt_deg", max_handover_tilt_deg, 12.0);
+        max_handover_tilt_rad_ = degToRad(max_handover_tilt_deg);
+        nh.param("max_handover_horizontal_acceleration_mps2",
+                 max_handover_horizontal_acceleration_mps2_, 0.6);
+        nh.param("handover_stable_duration_sec",
+                 handover_stable_duration_sec_, 0.5);
         double handover_yaw_tolerance_deg = 10.0;
         nh.param("handover_yaw_tolerance_deg",
                  handover_yaw_tolerance_deg, 10.0);
@@ -241,6 +272,10 @@ private:
             std::max(target_velocity_feedforward_gain_xy_, 0.0);
         target_velocity_feedforward_gain_z_ =
             std::max(target_velocity_feedforward_gain_z_, 0.0);
+        image_width_px_ = std::max(image_width_px_, 1.0);
+        image_height_px_ = std::max(image_height_px_, 1.0);
+        handover_center_area_ratio_ = clampValue(
+            handover_center_area_ratio_, 0.0, 1.0);
         terminal_camera_range_m_ = std::max(terminal_camera_range_m_, 1.0);
         max_approach_speed_mps_ = std::max(max_approach_speed_mps_, 0.1);
         max_vertical_speed_mps_ = std::max(max_vertical_speed_mps_, 0.1);
@@ -269,14 +304,28 @@ private:
             std::max(visual_alignment_max_vz_mps_, 0.0);
         visual_alignment_max_yaw_rate_radps_ =
             std::max(visual_alignment_max_yaw_rate_radps_, 0.0);
-        min_handover_forward_speed_mps_ =
-            std::max(min_handover_forward_speed_mps_, 0.0);
-        max_handover_forward_speed_mps_ = std::max(
-            max_handover_forward_speed_mps_, min_handover_forward_speed_mps_);
         handover_min_estimated_range_m_ =
             std::max(handover_min_estimated_range_m_, 0.0);
         handover_max_estimated_range_m_ = std::max(
             handover_max_estimated_range_m_, handover_min_estimated_range_m_);
+        visual_stabilization_start_range_m_ = std::max(
+            visual_stabilization_start_range_m_,
+            handover_max_estimated_range_m_ + 0.1);
+        visual_terminal_correction_speed_mps_ = clampValue(
+            visual_terminal_correction_speed_mps_, 0.0,
+            max_position_correction_speed_mps_);
+        visual_terminal_acceleration_mps2_ = clampValue(
+            visual_terminal_acceleration_mps2_, 0.0,
+            max_approach_acceleration_mps2_);
+        attitude_slowdown_start_rad_ = std::max(
+            attitude_slowdown_start_rad_, 0.0);
+        attitude_slowdown_full_rad_ = std::max(
+            attitude_slowdown_full_rad_,
+            attitude_slowdown_start_rad_ + degToRad(0.1));
+        min_handover_forward_speed_mps_ =
+            std::max(min_handover_forward_speed_mps_, 0.0);
+        max_handover_forward_speed_mps_ = std::max(
+            max_handover_forward_speed_mps_, min_handover_forward_speed_mps_);
         max_handover_velocity_std_mps_ =
             std::max(max_handover_velocity_std_mps_, 0.0);
         max_handover_radar_age_sec_ =
@@ -287,6 +336,11 @@ private:
             std::max(max_handover_closing_speed_mps_, 0.0);
         max_handover_opening_speed_mps_ =
             std::max(max_handover_opening_speed_mps_, 0.0);
+        max_handover_tilt_rad_ = std::max(max_handover_tilt_rad_, 0.0);
+        max_handover_horizontal_acceleration_mps2_ = std::max(
+            max_handover_horizontal_acceleration_mps2_, 0.0);
+        handover_stable_duration_sec_ =
+            std::max(handover_stable_duration_sec_, 0.0);
         handover_blend_duration_sec_ =
             std::max(handover_blend_duration_sec_, 0.0);
         required_centered_detections_ = std::max(required_centered_detections_, 1);
@@ -340,7 +394,12 @@ private:
 
     void selfPoseCallback(const geometry_msgs::PoseStamped::ConstPtr& message) {
         self_pose_ = *message;
-        self_yaw_ = tf::getYaw(message->pose.orientation);
+        tf::Matrix3x3 attitude(tf::Quaternion(
+            message->pose.orientation.x,
+            message->pose.orientation.y,
+            message->pose.orientation.z,
+            message->pose.orientation.w));
+        attitude.getRPY(self_roll_, self_pitch_, self_yaw_);
         have_self_pose_ = true;
     }
 
@@ -790,6 +849,9 @@ private:
             message.is_tracking && message.score >= minimum_detection_score_;
         if (!detection_valid_) {
             centered_detection_count_ = 0;
+            detection_inside_handover_region_ = false;
+            handover_region_u_ratio_ = 0.0;
+            handover_region_v_ratio_ = 0.0;
             return;
         }
 
@@ -801,9 +863,27 @@ private:
         const double raw_v = 0.5 * (message.y1 + message.y2);
         const double centered_u = bbox_center_is_offset_ ? raw_u : raw_u - cx_;
         const double centered_v = bbox_center_is_offset_ ? raw_v : raw_v - cy_;
-        if (std::abs(centered_u) <= center_tolerance_u_px_ &&
-            std::abs(centered_v) <= center_tolerance_v_px_) {
-            ++centered_detection_count_;
+        double half_region_width = center_tolerance_u_px_;
+        double half_region_height = center_tolerance_v_px_;
+        if (handover_center_area_ratio_ > 0.0) {
+            const double linear_fraction =
+                std::sqrt(handover_center_area_ratio_);
+            half_region_width = 0.5 * image_width_px_ * linear_fraction;
+            half_region_height = 0.5 * image_height_px_ * linear_fraction;
+        }
+        half_region_width = std::max(half_region_width, 1.0);
+        half_region_height = std::max(half_region_height, 1.0);
+        handover_region_u_ratio_ =
+            std::abs(centered_u) / half_region_width;
+        handover_region_v_ratio_ =
+            std::abs(centered_v) / half_region_height;
+        detection_inside_handover_region_ =
+            handover_region_u_ratio_ <= 1.0 &&
+            handover_region_v_ratio_ <= 1.0;
+        if (detection_inside_handover_region_) {
+            centered_detection_count_ = std::min(
+                centered_detection_count_ + 1,
+                required_centered_detections_);
         } else {
             centered_detection_count_ = 0;
         }
@@ -832,6 +912,34 @@ private:
         predicted.y += filtered_target_velocity_.y * dt;
         predicted.z += filtered_target_velocity_.z * dt;
         return predicted;
+    }
+
+    double currentTiltRad() const {
+        const double body_up_dot_world_up = clampValue(
+            std::cos(self_roll_) * std::cos(self_pitch_), -1.0, 1.0);
+        return std::acos(body_up_dot_world_up);
+    }
+
+    double visualStabilizationBlend(bool detection_fresh,
+                                    double target_range) const {
+        if (!detection_fresh ||
+            target_range > visual_stabilization_start_range_m_) {
+            return 0.0;
+        }
+        const double range_span = std::max(
+            visual_stabilization_start_range_m_ -
+                handover_max_estimated_range_m_,
+            0.1);
+        const double range_blend = clampValue(
+            (visual_stabilization_start_range_m_ - target_range) /
+                range_span,
+            0.0, 1.0);
+        const double attitude_blend = clampValue(
+            (currentTiltRad() - attitude_slowdown_start_rad_) /
+                (attitude_slowdown_full_rad_ -
+                 attitude_slowdown_start_rad_),
+            0.0, 1.0);
+        return std::max(range_blend, attitude_blend);
     }
 
     geometry_msgs::PoseStamped computeHandoverPose(
@@ -907,6 +1015,13 @@ private:
         geometry_msgs::TwistStamped command;
         command.header.stamp = now;
         command.header.frame_id = "map";
+        const bool detection_fresh = detection_valid_ &&
+            (now - detection_time_).toSec() <= detection_timeout_sec_;
+        const bool candidate_fresh = have_ibvs_candidate_ &&
+            (now - ibvs_candidate_time_).toSec() <= ibvs_candidate_timeout_sec_;
+        const double stabilization_blend =
+            visualStabilizationBlend(detection_fresh, target_range);
+
         double correction_x = position_gain_xy_ *
             (desired_pose.pose.position.x - self_pose_.pose.position.x);
         double correction_y = position_gain_xy_ *
@@ -930,6 +1045,12 @@ private:
                 std::sqrt(2.0 * approach_braking_deceleration_mps2_ *
                           braking_distance));
         }
+        if (stabilization_blend > 0.0) {
+            const double stabilized_limit =
+                (1.0 - stabilization_blend) * correction_limit +
+                stabilization_blend * visual_terminal_correction_speed_mps_;
+            correction_limit = std::min(correction_limit, stabilized_limit);
+        }
         limitHorizontal(correction_limit, correction_x, correction_y);
         command.twist.linear.x =
             target_velocity_feedforward_gain_xy_ * filtered_target_velocity_.x +
@@ -950,10 +1071,6 @@ private:
             yaw_gain_ * wrapAngle(desired_body_yaw - self_yaw_),
             -max_yaw_rate_radps_, max_yaw_rate_radps_);
 
-        const bool detection_fresh = detection_valid_ &&
-            (now - detection_time_).toSec() <= detection_timeout_sec_;
-        const bool candidate_fresh = have_ibvs_candidate_ &&
-            (now - ibvs_candidate_time_).toSec() <= ibvs_candidate_timeout_sec_;
         if (detection_fresh && candidate_fresh) {
             const double visual_vz = clampValue(
                 ibvs_candidate_.twist.linear.z,
@@ -978,11 +1095,17 @@ private:
                             command.twist.linear.x,
                             command.twist.linear.y);
         }
-        return rateLimitApproachCommand(command, now);
+        const double horizontal_acceleration_limit =
+            (1.0 - stabilization_blend) * max_approach_acceleration_mps2_ +
+            stabilization_blend * visual_terminal_acceleration_mps2_;
+        last_visual_stabilization_blend_ = stabilization_blend;
+        return rateLimitApproachCommand(
+            command, now, horizontal_acceleration_limit);
     }
 
     geometry_msgs::TwistStamped rateLimitApproachCommand(
-        const geometry_msgs::TwistStamped& requested, const ros::Time& now) {
+        const geometry_msgs::TwistStamped& requested, const ros::Time& now,
+        double horizontal_acceleration_limit) {
         if (!have_last_approach_command_) {
             last_approach_command_ = zeroCommand(now);
             last_approach_command_time_ = now;
@@ -995,7 +1118,7 @@ private:
                          last_approach_command_.twist.linear.x;
         double delta_y = requested.twist.linear.y -
                          last_approach_command_.twist.linear.y;
-        limitHorizontal(max_approach_acceleration_mps2_ * dt,
+        limitHorizontal(horizontal_acceleration_limit * dt,
                         delta_x, delta_y);
         limited.twist.linear.x =
             last_approach_command_.twist.linear.x + delta_x;
@@ -1011,6 +1134,9 @@ private:
                        last_approach_command_.twist.angular.z,
                        -max_yaw_acceleration_radps2_ * dt,
                        max_yaw_acceleration_radps2_ * dt);
+        last_horizontal_command_acceleration_mps2_ = dt > 1e-4
+            ? std::hypot(delta_x, delta_y) / dt
+            : 0.0;
         limited.header.stamp = now;
         last_approach_command_ = limited;
         last_approach_command_time_ = now;
@@ -1021,6 +1147,9 @@ private:
         last_approach_command_ = zeroCommand(now);
         last_approach_command_time_ = now;
         have_last_approach_command_ = false;
+        last_horizontal_command_acceleration_mps2_ = 0.0;
+        last_visual_stabilization_blend_ = 0.0;
+        handover_stable_since_ = ros::Time();
     }
 
     geometry_msgs::TwistStamped zeroCommand(const ros::Time& now) const {
@@ -1146,6 +1275,7 @@ private:
                 (now - detection_time_).toSec() <= detection_timeout_sec_;
             setState(detection_fresh ? State::VISUAL_ALIGN : State::APPROACH);
             const bool visual_ready = detection_fresh &&
+                detection_inside_handover_region_ &&
                 centered_detection_count_ >= required_centered_detections_;
             const bool ibvs_candidate_fresh = have_ibvs_candidate_ &&
                 (now - ibvs_candidate_time_).toSec() <=
@@ -1186,9 +1316,29 @@ private:
                     max_handover_command_yaw_rate_radps_ &&
                 closing_speed <= max_handover_closing_speed_mps_ &&
                 closing_speed >= -max_handover_opening_speed_mps_;
+            const double tilt_rad = currentTiltRad();
+            const bool attitude_stable =
+                tilt_rad <= max_handover_tilt_rad_;
+            const bool acceleration_stable =
+                last_horizontal_command_acceleration_mps2_ <=
+                    max_handover_horizontal_acceleration_mps2_;
+            const bool instantaneous_handover_ready =
+                visual_ready && ibvs_candidate_fresh && radar_healthy &&
+                range_safe && pose_gate_satisfied && command_stable &&
+                attitude_stable && acceleration_stable;
+            if (instantaneous_handover_ready) {
+                if (handover_stable_since_.isZero()) {
+                    handover_stable_since_ = now;
+                }
+            } else {
+                handover_stable_since_ = ros::Time();
+            }
+            const double stable_duration = handover_stable_since_.isZero()
+                ? 0.0 : (now - handover_stable_since_).toSec();
+            const bool handover_ready = instantaneous_handover_ready &&
+                stable_duration >= handover_stable_duration_sec_;
 
-            if (visual_ready && ibvs_candidate_fresh && radar_healthy &&
-                range_safe && pose_gate_satisfied && command_stable) {
+            if (handover_ready) {
                 handover_time_ = now;
                 handover_blend_start_command_ = approach_command;
                 handover_blend_start_command_.header.stamp = now;
@@ -1200,12 +1350,19 @@ private:
                          "pose error %.2f m, yaw error %.1f deg, "
                          "velocity sigma %.2f m/s, radar age %.2f s, "
                          "closing speed %.2f m/s (window %.2f to %.2f), "
-                         "centered detections %d.",
+                         "tilt %.1f deg, horizontal acceleration %.2f m/s^2, "
+                         "image ratios %.2f/%.2f, slowdown %.2f, stable %.2f s, "
+                         "region detections %d.",
                          target_range,
                          position_error, yaw_error * 180.0 / kPi,
                          velocity_std, radar_age, closing_speed,
                          -max_handover_opening_speed_mps_,
                          max_handover_closing_speed_mps_,
+                         tilt_rad * 180.0 / kPi,
+                         last_horizontal_command_acceleration_mps2_,
+                         handover_region_u_ratio_,
+                         handover_region_v_ratio_,
+                         last_visual_stabilization_blend_, stable_duration,
                          centered_detection_count_);
             } else {
                 publishHandoverFlag(false);
@@ -1247,6 +1404,9 @@ private:
     bool bbox_center_is_offset_ = true;
     double cx_ = 480.0;
     double cy_ = 270.0;
+    double image_width_px_ = 960.0;
+    double image_height_px_ = 540.0;
+    double handover_center_area_ratio_ = 0.40;
     double center_tolerance_u_px_ = 40.0;
     double center_tolerance_v_px_ = 40.0;
     double detection_timeout_sec_ = 0.30;
@@ -1300,25 +1460,35 @@ private:
     double visual_alignment_blend_ = 0.5;
     double visual_alignment_max_vz_mps_ = 0.6;
     double visual_alignment_max_yaw_rate_radps_ = 0.35;
+    double visual_stabilization_start_range_m_ = 35.0;
+    double visual_terminal_correction_speed_mps_ = 1.2;
+    double visual_terminal_acceleration_mps2_ = 0.5;
+    double attitude_slowdown_start_rad_ = degToRad(8.0);
+    double attitude_slowdown_full_rad_ = degToRad(15.0);
     double closing_speed_margin_mps_ = 2.0;
     double min_handover_forward_speed_mps_ = 3.0;
     double max_handover_forward_speed_mps_ = 12.0;
     double handover_position_tolerance_m_ = 2.5;
     double handover_yaw_tolerance_rad_ = degToRad(10.0);
     bool use_legacy_pose_handover_gate_ = false;
-    double handover_min_estimated_range_m_ = 5.0;
-    double handover_max_estimated_range_m_ = 45.0;
+    double handover_min_estimated_range_m_ = 10.0;
+    double handover_max_estimated_range_m_ = 30.0;
     double max_handover_velocity_std_mps_ = 1.0;
     double max_handover_radar_age_sec_ = 5.0;
     double max_handover_command_yaw_rate_radps_ = 0.30;
     double max_handover_closing_speed_mps_ = 2.0;
     double max_handover_opening_speed_mps_ = 0.5;
+    double max_handover_tilt_rad_ = degToRad(12.0);
+    double max_handover_horizontal_acceleration_mps2_ = 0.6;
+    double handover_stable_duration_sec_ = 0.5;
     double ibvs_candidate_timeout_sec_ = 0.20;
     double handover_blend_duration_sec_ = 0.0;
     double control_rate_hz_ = 20.0;
 
     sensor_msgs::NavSatFix self_global_;
     geometry_msgs::PoseStamped self_pose_;
+    double self_roll_ = 0.0;
+    double self_pitch_ = 0.0;
     double self_yaw_ = 0.0;
     bool have_self_global_ = false;
     bool have_self_pose_ = false;
@@ -1337,6 +1507,9 @@ private:
     std::vector<TimedRadarMeasurement> radar_bootstrap_measurements_;
 
     bool detection_valid_ = false;
+    bool detection_inside_handover_region_ = false;
+    double handover_region_u_ratio_ = 0.0;
+    double handover_region_v_ratio_ = 0.0;
     int centered_detection_count_ = 0;
     ros::Time detection_time_;
     geometry_msgs::TwistStamped ibvs_candidate_;
@@ -1346,6 +1519,9 @@ private:
     geometry_msgs::TwistStamped last_approach_command_;
     ros::Time last_approach_command_time_;
     bool have_last_approach_command_ = false;
+    double last_horizontal_command_acceleration_mps2_ = 0.0;
+    double last_visual_stabilization_blend_ = 0.0;
+    ros::Time handover_stable_since_;
     ros::Time handover_time_;
     bool have_handover_blend_start_command_ = false;
     bool handover_complete_ = false;

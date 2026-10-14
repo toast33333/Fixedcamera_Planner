@@ -28,17 +28,28 @@ COMMON_ENV = {
     "TARGET_VELOCITY_FEEDFORWARD_GAIN_Z": "0",
     "ENFORCE_MINIMUM_HANDOVER_ALTITUDE": "true",
     "MINIMUM_HANDOVER_ALTITUDE_M": "3",
+    "IMAGE_WIDTH_PX": "960",
+    "IMAGE_HEIGHT_PX": "540",
+    "HANDOVER_CENTER_AREA_RATIO": "0.40",
     "REQUIRED_CENTERED_DETECTIONS": "10",
     "USE_BRAKING_SPEED_PROFILE": "true",
     "APPROACH_BRAKING_DECELERATION_MPS2": "2.0",
     "APPROACH_BRAKING_POSITION_BUFFER_M": "2.5",
-    "USE_LEGACY_POSE_HANDOVER_GATE": "true",
+    "VISUAL_STABILIZATION_START_RANGE_M": "35.0",
+    "VISUAL_TERMINAL_CORRECTION_SPEED_MPS": "1.2",
+    "VISUAL_TERMINAL_ACCELERATION_MPS2": "0.5",
+    "ATTITUDE_SLOWDOWN_START_DEG": "8.0",
+    "ATTITUDE_SLOWDOWN_FULL_DEG": "15.0",
+    "USE_LEGACY_POSE_HANDOVER_GATE": "false",
     "HANDOVER_POSITION_TOLERANCE_M": "5.0",
     "HANDOVER_YAW_TOLERANCE_DEG": "20.0",
-    "HANDOVER_MIN_ESTIMATED_RANGE_M": "18.0",
-    "HANDOVER_MAX_ESTIMATED_RANGE_M": "38.0",
+    "HANDOVER_MIN_ESTIMATED_RANGE_M": "10.0",
+    "HANDOVER_MAX_ESTIMATED_RANGE_M": "30.0",
     "MAX_HANDOVER_CLOSING_SPEED_MPS": "2.0",
     "MAX_HANDOVER_OPENING_SPEED_MPS": "0.5",
+    "MAX_HANDOVER_TILT_DEG": "12.0",
+    "MAX_HANDOVER_HORIZONTAL_ACCELERATION_MPS2": "0.6",
+    "HANDOVER_STABLE_DURATION_SEC": "0.5",
     "CAPTURE_DISTANCE_M": "5",
     "HANDOVER_BLEND_DURATION_SEC": "2.0",
     "DETECTION_RANGE_M": "30",
@@ -361,6 +372,10 @@ def main():
         for key, value in row.items():
             if key and value is not None and value.strip() != "":
                 env[key.strip()] = value.strip()
+        if os.environ.get("FORCE_APPROACH_ONLY", "0") == "1":
+            env["SCENARIO_NAME"] = "雷达抵近交接验证"
+            env["STOP_ON_HANDOVER"] = "true"
+            env["HANDOVER_BLEND_DURATION_SEC"] = "0.0"
         log_path = os.path.join(batch_dir, case_name + "_launcher.log")
         print("=== Running %s ===" % case_name, flush=True)
         with open(log_path, "w", encoding="utf-8") as log:

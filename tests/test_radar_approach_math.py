@@ -112,6 +112,32 @@ def handover_relative_speed_stable(closing_speed, maximum_closing_speed,
             <= maximum_closing_speed)
 
 
+def handover_region_half_extents(image_width, image_height, area_ratio):
+    linear_fraction = math.sqrt(area_ratio)
+    return (0.5 * image_width * linear_fraction,
+            0.5 * image_height * linear_fraction)
+
+
+def visual_stabilization_blend(target_range, tilt_deg,
+                               stabilization_start_range=35.0,
+                               handover_max_range=30.0,
+                               attitude_start_deg=8.0,
+                               attitude_full_deg=15.0):
+    if target_range > stabilization_start_range:
+        return 0.0
+    range_blend = max(0.0, min(
+        (stabilization_start_range - target_range) /
+        (stabilization_start_range - handover_max_range),
+        1.0,
+    ))
+    attitude_blend = max(0.0, min(
+        (tilt_deg - attitude_start_deg) /
+        (attitude_full_deg - attitude_start_deg),
+        1.0,
+    ))
+    return max(range_blend, attitude_blend)
+
+
 class RadarApproachMathTest(unittest.TestCase):
     def test_twenty_meter_terminal_geometry_centers_upward_camera(self):
         target = (100.0, 20.0, 30.0)
@@ -228,6 +254,22 @@ class RadarApproachMathTest(unittest.TestCase):
         self.assertTrue(handover_relative_speed_stable(-0.50, 2.0, 0.5))
         self.assertTrue(handover_relative_speed_stable(0.75, 2.0, 0.5))
         self.assertFalse(handover_relative_speed_stable(2.05, 2.0, 0.5))
+
+    def test_central_handover_region_occupies_forty_percent_of_image(self):
+        half_width, half_height = handover_region_half_extents(
+            960.0, 540.0, 0.40)
+        region_area = (2.0 * half_width) * (2.0 * half_height)
+
+        self.assertAlmostEqual(region_area / (960.0 * 540.0), 0.40)
+        self.assertAlmostEqual(half_width, 303.578655, places=5)
+        self.assertAlmostEqual(half_height, 170.762993, places=5)
+
+    def test_visual_stabilization_uses_range_or_measured_tilt(self):
+        self.assertEqual(visual_stabilization_blend(40.0, 20.0), 0.0)
+        self.assertAlmostEqual(visual_stabilization_blend(32.5, 5.0), 0.5)
+        self.assertAlmostEqual(visual_stabilization_blend(34.0, 11.5), 0.5)
+        self.assertEqual(visual_stabilization_blend(30.0, 5.0), 1.0)
+        self.assertEqual(visual_stabilization_blend(34.0, 15.0), 1.0)
 
     def test_twenty_five_meter_terminal_geometry_preserves_slant_range(self):
         target = (80.0, -12.0, 9.0)

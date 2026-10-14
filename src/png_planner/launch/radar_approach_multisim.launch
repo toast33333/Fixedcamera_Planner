@@ -33,19 +33,30 @@
   <arg name="target_velocity_feedforward_gain_z" default="0.0" />
   <arg name="enforce_minimum_handover_altitude" default="true" />
   <arg name="minimum_handover_altitude_m" default="3.0" />
+  <arg name="image_width_px" default="960.0" />
+  <arg name="image_height_px" default="540.0" />
+  <arg name="handover_center_area_ratio" default="0.40" />
   <arg name="center_tolerance_u_px" default="80.0" />
   <arg name="center_tolerance_v_px" default="80.0" />
   <arg name="required_centered_detections" default="10" />
+  <arg name="visual_stabilization_start_range_m" default="35.0" />
+  <arg name="visual_terminal_correction_speed_mps" default="1.2" />
+  <arg name="visual_terminal_acceleration_mps2" default="0.5" />
+  <arg name="attitude_slowdown_start_deg" default="8.0" />
+  <arg name="attitude_slowdown_full_deg" default="15.0" />
   <arg name="handover_position_tolerance_m" default="5.0" />
   <arg name="handover_yaw_tolerance_deg" default="20.0" />
-  <arg name="use_legacy_pose_handover_gate" default="true" />
-  <arg name="handover_min_estimated_range_m" default="18.0" />
-  <arg name="handover_max_estimated_range_m" default="38.0" />
+  <arg name="use_legacy_pose_handover_gate" default="false" />
+  <arg name="handover_min_estimated_range_m" default="10.0" />
+  <arg name="handover_max_estimated_range_m" default="30.0" />
   <arg name="max_handover_velocity_std_mps" default="1.0" />
   <arg name="max_handover_radar_age_sec" default="5.0" />
   <arg name="max_handover_command_yaw_rate_radps" default="0.30" />
   <arg name="max_handover_closing_speed_mps" default="2.0" />
   <arg name="max_handover_opening_speed_mps" default="0.5" />
+  <arg name="max_handover_tilt_deg" default="12.0" />
+  <arg name="max_handover_horizontal_acceleration_mps2" default="0.6" />
+  <arg name="handover_stable_duration_sec" default="0.5" />
   <arg name="handover_blend_duration_sec" default="0.0" />
   <arg name="radar_noise_std_m" default="0.0" />
   <arg name="radar_period_jitter_std_sec" default="0.0" />
@@ -254,9 +265,17 @@
     <param name="target_velocity_feedforward_gain_z" value="$(arg target_velocity_feedforward_gain_z)" />
     <param name="enforce_minimum_handover_altitude" value="$(arg enforce_minimum_handover_altitude)" />
     <param name="minimum_handover_altitude_m" value="$(arg minimum_handover_altitude_m)" />
+    <param name="image_width_px" value="$(arg image_width_px)" />
+    <param name="image_height_px" value="$(arg image_height_px)" />
+    <param name="handover_center_area_ratio" value="$(arg handover_center_area_ratio)" />
     <param name="center_tolerance_u_px" value="$(arg center_tolerance_u_px)" />
     <param name="center_tolerance_v_px" value="$(arg center_tolerance_v_px)" />
     <param name="required_centered_detections" value="$(arg required_centered_detections)" />
+    <param name="visual_stabilization_start_range_m" value="$(arg visual_stabilization_start_range_m)" />
+    <param name="visual_terminal_correction_speed_mps" value="$(arg visual_terminal_correction_speed_mps)" />
+    <param name="visual_terminal_acceleration_mps2" value="$(arg visual_terminal_acceleration_mps2)" />
+    <param name="attitude_slowdown_start_deg" value="$(arg attitude_slowdown_start_deg)" />
+    <param name="attitude_slowdown_full_deg" value="$(arg attitude_slowdown_full_deg)" />
     <param name="handover_position_tolerance_m" value="$(arg handover_position_tolerance_m)" />
     <param name="handover_yaw_tolerance_deg" value="$(arg handover_yaw_tolerance_deg)" />
     <param name="use_legacy_pose_handover_gate" value="$(arg use_legacy_pose_handover_gate)" />
@@ -267,6 +286,9 @@
     <param name="max_handover_command_yaw_rate_radps" value="$(arg max_handover_command_yaw_rate_radps)" />
     <param name="max_handover_closing_speed_mps" value="$(arg max_handover_closing_speed_mps)" />
     <param name="max_handover_opening_speed_mps" value="$(arg max_handover_opening_speed_mps)" />
+    <param name="max_handover_tilt_deg" value="$(arg max_handover_tilt_deg)" />
+    <param name="max_handover_horizontal_acceleration_mps2" value="$(arg max_handover_horizontal_acceleration_mps2)" />
+    <param name="handover_stable_duration_sec" value="$(arg handover_stable_duration_sec)" />
     <param name="handover_blend_duration_sec" value="$(arg handover_blend_duration_sec)" />
   </node>
 
