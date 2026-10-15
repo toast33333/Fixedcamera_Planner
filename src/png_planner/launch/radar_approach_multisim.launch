@@ -1,6 +1,7 @@
 <launch>
   <arg name="results_dir" default="/tmp/radar_approach_multisim" />
   <arg name="core_tuning_config" default="$(find png_planner)/config/core_tuning.yaml" />
+  <arg name="sitl_xy_velocity_limit_mps" default="20.0" />
   <arg name="target_speed_mps" default="2.0" />
   <arg name="target_heading_deg" default="0.0" />
   <arg name="target_turn_rate_degps" default="0.0" />
@@ -307,6 +308,7 @@
         required="true"
         clear_params="true">
     <param name="results_dir" value="$(arg results_dir)" />
+    <param name="sitl_xy_velocity_limit_mps" value="$(arg sitl_xy_velocity_limit_mps)" />
     <param name="interceptor_model" value="iris_1" />
     <param name="target_model" value="iris_2" />
     <param name="radar_guidance_enabled" value="true" />

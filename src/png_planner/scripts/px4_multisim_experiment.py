@@ -27,8 +27,8 @@ from detection_msgs.msg import Detection
 from gazebo_msgs.msg import ModelStates
 from geometry_msgs.msg import Point, PoseStamped, TwistStamped, Vector3Stamped
 from kcf_msgs.msg import Bbox
-from mavros_msgs.msg import State
-from mavros_msgs.srv import CommandBool, SetMode
+from mavros_msgs.msg import ParamValue, State
+from mavros_msgs.srv import CommandBool, ParamSet, SetMode
 from nav_msgs.msg import Path
 from sensor_msgs.msg import Image
 from std_msgs.msg import Bool, Float32, String
@@ -100,6 +100,12 @@ class FixedCameraMultisimExperiment:
         self.chase_timeout = float(rospy.get_param("~chase_timeout_s", 45.0))
         self.takeoff_tolerance = float(rospy.get_param("~takeoff_tolerance_m", 0.45))
         self.control_rate = float(rospy.get_param("~control_rate_hz", 20.0))
+        # Simulation-only PX4 limit.  The production/field launch never writes
+        # autopilot parameters; this is set here so high-speed SITL experiments
+        # are not silently clipped by PX4's 12 m/s default.
+        self.sitl_xy_velocity_limit = max(
+            0.1, float(rospy.get_param(
+                "~sitl_xy_velocity_limit_mps", 20.0)))
         self.results_dir = os.path.expanduser(rospy.get_param("~results_dir", "/tmp/fixed_camera_multisim"))
         self.stop_on_handover = bool(
             rospy.get_param("~stop_on_handover", False))
@@ -251,6 +257,8 @@ class FixedCameraMultisimExperiment:
         self.phase_started = rospy.Time.now()
         self.chase_started = rospy.Time(0)
         self.last_service_attempt = rospy.Time(0)
+        self.last_param_attempt = rospy.Time(0)
+        self.sitl_velocity_limits_configured = False
         self.success_time = None
         self.tracking = False
         self.pixel_u = float("nan")
@@ -360,6 +368,10 @@ class FixedCameraMultisimExperiment:
         self.target_arm = rospy.ServiceProxy(self.target_ns + "/cmd/arming", CommandBool)
         self.interceptor_mode = rospy.ServiceProxy(self.interceptor_ns + "/set_mode", SetMode)
         self.target_mode = rospy.ServiceProxy(self.target_ns + "/set_mode", SetMode)
+        self.interceptor_param_set = rospy.ServiceProxy(
+            self.interceptor_ns + "/param/set", ParamSet)
+        self.target_param_set = rospy.ServiceProxy(
+            self.target_ns + "/param/set", ParamSet)
 
         self.interceptor_path = Path()
         self.interceptor_path.header.frame_id = "world"
@@ -687,6 +699,36 @@ class FixedCameraMultisimExperiment:
             except rospy.ServiceException as exc:
                 rospy.logwarn_throttle(2.0, "[FixedCameraSim] %s service call failed: %s", name, exc)
 
+    def configure_sitl_velocity_limits(self):
+        if self.sitl_velocity_limits_configured:
+            return True
+        now = rospy.Time.now()
+        if (now - self.last_param_attempt).to_sec() < 1.0:
+            return False
+        self.last_param_attempt = now
+        value = ParamValue(integer=0, real=self.sitl_xy_velocity_limit)
+        try:
+            interceptor_result = self.interceptor_param_set(
+                param_id="MPC_XY_VEL_MAX", value=value)
+            target_result = self.target_param_set(
+                param_id="MPC_XY_VEL_MAX", value=value)
+            self.sitl_velocity_limits_configured = (
+                interceptor_result.success and target_result.success)
+            if self.sitl_velocity_limits_configured:
+                rospy.loginfo(
+                    "[FixedCameraSim] SITL MPC_XY_VEL_MAX set to %.1f m/s "
+                    "for interceptor and target.",
+                    self.sitl_xy_velocity_limit)
+            else:
+                rospy.logwarn(
+                    "[FixedCameraSim] PX4 rejected one or more SITL velocity "
+                    "limit updates; retrying.")
+        except rospy.ServiceException as exc:
+            rospy.logwarn_throttle(
+                2.0, "[FixedCameraSim] SITL velocity-limit service failed: %s",
+                exc)
+        return self.sitl_velocity_limits_configured
+
     def project_target(self, interceptor_pose, target_pose):
         delta_world = np.array([
             target_pose.position.x - interceptor_pose.position.x,
@@ -946,7 +988,8 @@ class FixedCameraMultisimExperiment:
             self.publish_due_radar(now)
 
         if self.phase == "WAITING_FOR_LINKS":
-            if self.links_ready(models):
+            if (self.links_ready(models) and
+                    self.configure_sitl_velocity_limits()):
                 self.set_phase("SETPOINT_WARMUP")
 
         elif self.phase == "SETPOINT_WARMUP":
