@@ -221,7 +221,11 @@ def main() -> int:
 
         copy_file(
             DEPLOY_ROOT / "README.md",
-            output / "README_AIRBORNE.md",
+            output / "README.md",
+        )
+        copy_file(
+            TEMPLATES_ROOT / "workspace_gitignore",
+            output / ".gitignore",
         )
         copy_file(
             DEPLOY_ROOT / "build_airborne.sh",

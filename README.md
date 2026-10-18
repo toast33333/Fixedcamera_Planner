@@ -17,7 +17,9 @@ The exported workspace contains the timestamped RK3588 detector, one validated
 RKNN model, the fixed-camera controller, radar approach/handover controller,
 their active configuration and the three field start modes. See
 `docs/代码结构与机载部署.md` and `deploy/airborne/README.md` for the exact
-boundary and installation procedure.
+boundary and installation procedure. The generated workspace is also published
+as the simulation-free `airborne` branch for direct shallow cloning on the
+aircraft; `main` remains the research/development branch.
 
 > Fixed-camera development now lives in the new `fixed_camera_ibvs` node. The
 > original gimbal controllers remain unchanged as a comparison baseline.

@@ -4,6 +4,14 @@
 精简 ROS1 工作区。它只面向测试机机载 Ubuntu/RK3588，不包含 Gazebo、SITL、
 批量仿真、结果分析、历史控制器、旧视觉入口、备份脚本或备用模型。
 
+GitHub 的 `airborne` 分支就是这个白名单工作区，可以在飞机上直接浅克隆：
+
+```bash
+git clone --depth 1 --branch airborne --single-branch \
+  https://github.com/toast33333/Fixedcamera_Planner.git \
+  ~/fixed_camera_airborne_ws
+```
+
 ## 1. 包内结构
 
 ```text
