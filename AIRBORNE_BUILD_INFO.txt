@@ -1,3 +1,3 @@
 source_repository=https://github.com/toast33333/Fixedcamera_Planner.git
-source_revision=32e0457b9cb55ccb1d85190f0fadc4787344d5d6
+source_revision=948fc4d546b64090b04779ab8b7c51b7e96c2260
 profile=arducopter_4.6.3_mavros_rk3576
