@@ -1,7 +1,7 @@
 # 固定相机算法机载部署包
 
 本目录说明的是由 `tools/deployment/export_airborne_workspace.py` 生成的
-精简 ROS1 工作区。它只面向测试机机载 Ubuntu/RK3588，不包含 Gazebo、SITL、
+精简 ROS1 工作区。它只面向测试机机载 Ubuntu/RK3576，不包含 Gazebo、SITL、
 批量仿真、结果分析、历史控制器、旧视觉入口、备份脚本或备用模型。
 
 GitHub 的 `airborne` 分支就是这个白名单工作区，可以在飞机上直接浅克隆：
@@ -16,7 +16,7 @@ git clone --depth 1 --branch airborne --single-branch \
 
 ```text
 src/Fixedcamera_Planner/
-├── src/detection_msgs/       # RK3588 检测与带采集时间戳 Detection 消息
+├── src/detection_msgs/       # RK3576 检测与带采集时间戳 Detection 消息
 ├── src/kcf_msgs/             # 仅保留旧 Bbox 消息兼容定义
 ├── src/png_planner/          # 固定相机控制与雷达抵近/交接算法
 └── tools/field/              # 三种无雷达视觉控制启动入口
@@ -29,8 +29,9 @@ src/Fixedcamera_Planner/
 
 - Ubuntu 20.04 / ROS Noetic；
 - Python 3；
-- MAVROS 已经能够连接 PX4，并发布本机的位姿、速度和 IMU 话题；
-- RK3588 对应版本的 RKNN Lite2 Python wheel 和运行库；
+- MAVROS 通过 `apm.launch` 连接 Pixhawk6C/ArduCopter 4.6.3；
+- 飞控 TELEM2 与机载机 `/dev/ttyS8:115200` 对接；
+- RK3576 对应版本的 RKNN Lite2 Python wheel 和运行库；
 - OpenCV、NumPy、GeographicLib。
 
 ROS/系统依赖可在联网环境下安装：
@@ -107,7 +108,7 @@ roslaunch png_planner radar_approach_intercept.launch
 
 1. `core_tuning.yaml` 中相机安装上抬角和相机相对机体中心偏移；
 2. `fixed_camera_ibvs.yaml` 中图像尺寸、内参与实际相机输出一致；
-3. PX4/MAVROS与视觉计算机系统时钟同步；
+3. ArduCopter/MAVROS与视觉计算机系统时钟同步；
 4. `/object_detections` 的时间戳递增且 `frame_id` 正确；
-5. 飞控的 GUIDED/OFFBOARD 速度接口、坐标系和失控保护已经台架验证；
+5. MAVROS 使用 `LOCAL_NED`，ArduCopter 的 `GUIDED` 速度接口和失控保护已经台架验证；
 6. 首飞使用限速、系留或足够大的隔离空域，并保留人工切回姿态/定点模式的能力。
