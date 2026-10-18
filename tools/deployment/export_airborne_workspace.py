@@ -164,7 +164,10 @@ def write_checksums(workspace: Path, files: Iterable[Path]) -> None:
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         relative = path.relative_to(workspace).as_posix()
         lines.append(f"{digest}  {relative}")
-    checksum_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # Always use LF so a bundle exported on Windows is directly verifiable on
+    # the Linux aircraft.  Path.write_text() otherwise translates newlines to
+    # CRLF on Windows, which also leaves a stray '\r' in sha256sum filenames.
+    checksum_path.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
 
 
 def make_archive(workspace: Path, archive: Path) -> None:
@@ -241,12 +244,11 @@ def main() -> int:
                 path.chmod(path.stat().st_mode | 0o111)
 
         revision = git_revision()
-        (output / "AIRBORNE_BUILD_INFO.txt").write_text(
+        (output / "AIRBORNE_BUILD_INFO.txt").write_bytes((
             "source_repository=https://github.com/toast33333/Fixedcamera_Planner.git\n"
             f"source_revision={revision}\n"
-            "profile=arducopter_4.6.3_mavros_rk3576\n",
-            encoding="utf-8",
-        )
+            "profile=arducopter_4.6.3_mavros_rk3576\n"
+        ).encode("utf-8"))
 
         files = validate_export(output)
         write_checksums(output, files)
