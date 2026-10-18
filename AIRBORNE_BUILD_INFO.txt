@@ -1,0 +1,3 @@
+source_repository=https://github.com/toast33333/Fixedcamera_Planner.git
+source_revision=e8a9f95a7c11c8078da89563b75cd36e7fa41de2
+profile=px4_mavros_rk3588

@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>png_planner</name>
+  <version>1.0.0</version>
+  <description>Fixed-camera visual guidance and radar approach field controller.</description>
+  <maintainer email="maintainer@example.com">Fixed Camera Team</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>detection_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>kcf_msgs</depend>
+  <depend>roscpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>tf</depend>
+  <exec_depend>mavros</exec_depend>
+
+  <export />
+</package>

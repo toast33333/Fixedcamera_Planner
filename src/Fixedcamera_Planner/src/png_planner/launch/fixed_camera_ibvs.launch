@@ -1,0 +1,24 @@
+<launch>
+  <arg name="config" default="$(find png_planner)/config/fixed_camera_ibvs.yaml" />
+  <arg name="core_tuning_config" default="$(find png_planner)/config/core_tuning.yaml" />
+  <arg name="detection_mode" default="1" />
+  <arg name="detection_topic" default="/object_detections" />
+  <arg name="enable_horizontal_control" default="true" />
+  <arg name="enable_height_control" default="true" />
+  <arg name="forward_speed_mps" default="5.0" />
+  <arg name="lost_forward_speed_mps" default="5.0" />
+
+  <node pkg="png_planner"
+        type="fixed_camera_ibvs"
+        name="fixed_camera_ibvs"
+        output="screen">
+    <rosparam command="load" file="$(arg config)" />
+    <rosparam command="load" file="$(arg core_tuning_config)" />
+    <param name="detection_mode" value="$(arg detection_mode)" />
+    <param name="detection_topic" value="$(arg detection_topic)" />
+    <param name="enable_horizontal_control" value="$(arg enable_horizontal_control)" />
+    <param name="enable_height_control" value="$(arg enable_height_control)" />
+    <param name="V_default" value="$(arg forward_speed_mps)" />
+    <param name="lost_forward_speed" value="$(arg lost_forward_speed_mps)" />
+  </node>
+</launch>
