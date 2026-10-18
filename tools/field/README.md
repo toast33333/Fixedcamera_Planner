@@ -23,13 +23,21 @@ FORWARD_SPEED_MPS=11.5 ./tools/field/start_intercept_full.sh
 
 常用可覆盖参数：
 
-- `STATE_SOURCE=px4`：直接使用 MAVROS/PX4 状态，默认值。
+- `STATE_SOURCE=mavros`：直接使用 ArduCopter/MAVROS 状态，默认值。
+- `STATE_SOURCE=apm`：`mavros` 的同义写法。
 - `STATE_SOURCE=inslib`：同时启动 INSLIB 状态估计器。
 - `DETECTION_TOPIC=/object_detections`：带采集时间戳的视觉检测话题。
 - `DETECTION_MODE=1`：使用 `detection_msgs/Detection`，默认值。
 - `MAVROS_STATE_TOPIC=/mavros/state`：飞控连接状态话题。
 - `PREFLIGHT_TIMEOUT_S=10`：启动前等待状态和视觉消息的最长时间。
+- `REQUEST_APM_STREAMS=0`：默认由RK3576容器入口统一请求遥测流；脱离容器单独运行时可设为 `1`。
+- `ALLOW_ALREADY_GUIDED=0`：默认拒绝在已经处于 `GUIDED` 时启动，避免突然接管。
 - `WS_DIR=...`：ROS 工作空间根目录；默认按仓库所在位置自动推导。
+
+实机默认按 `Pixhawk6C + ArduCopter 4.6.3 + TELEM2` 使用。MAVROS 必须通过
+`apm.launch` 启动，TELEM2 当前映射为 `/dev/ttyS8:115200`，并保持
+`/mavros/setpoint_velocity/mav_frame=LOCAL_NED`。脚本会检查 ArduPilot 类型、
+坐标系、IMU、本地位姿、本地速度和视觉跟踪；GPS/EKF 尚未建立位置解时不会启动控制器。
 
 视觉节点应在相机帧读出时填写 `Detection.header.stamp`，不要填写推理完成
 或消息发布时刻。视觉计算机与 MAVROS/IMU 若不在同一台主机上，必须先用

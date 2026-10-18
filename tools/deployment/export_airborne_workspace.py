@@ -244,7 +244,7 @@ def main() -> int:
         (output / "AIRBORNE_BUILD_INFO.txt").write_text(
             "source_repository=https://github.com/toast33333/Fixedcamera_Planner.git\n"
             f"source_revision={revision}\n"
-            "profile=px4_mavros_rk3588\n",
+            "profile=arducopter_4.6.3_mavros_rk3576\n",
             encoding="utf-8",
         )
 
