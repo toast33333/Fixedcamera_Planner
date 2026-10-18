@@ -2,7 +2,7 @@
 #
 # This file is intentionally flat.  It is loaded into both private node
 # namespaces after their complete base configuration.  Each node ignores keys
-# that it does not use, so the four tuning groups can live in one file.
+# that it does not use, so the five tuning groups can live in one file.
 # Units are written in parameter names wherever practical.
 
 # ============================================================================
@@ -10,8 +10,8 @@
 #    These are the main k/N gains in the post-handover controller.
 # ============================================================================
 k_yaw: 1.5
-k_yaw_d: 0.3
-k_z_ff: 1.0
+k_yaw_d: 0.5
+k_z_ff: 1.5
 N_nav_z: 2.0
 vertical_integrator_decay: 0.98
 
@@ -104,3 +104,20 @@ fov_guard_shape_max: 4.0
 fov_slowdown_start_ratio: 0.99
 fov_min_forward_speed_ratio: 1.0
 fov_emergency_yaw_ratio: 0.85
+
+# ============================================================================
+# 5. Camera installation geometry
+#    The upward angle is deliberately user-facing: a positive value means the
+#    optical axis points above the aircraft +x (forward) axis.  The position is
+#    measured from the aircraft reference centre to the camera optical centre
+#    in the ROS FLU body frame: +x forward, +y left, +z up.
+#
+#    Reference-centre distance = sqrt(x^2 + y^2 + z^2).  The current synthetic
+#    camera is colocated with the aircraft reference centre, so that distance
+#    is 0.0 m.  Replace the three offsets with measured installation values for
+#    the field airframe; do not enter the same scalar distance on every axis.
+# ============================================================================
+camera_mount_upward_angle_deg: 20.0
+camera_offset_body_x_m: 0.0
+camera_offset_body_y_m: 0.0
+camera_offset_body_z_m: 0.0

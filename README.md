@@ -1,5 +1,24 @@
 # png_planner_ws
 
+## Aircraft deployment
+
+Do not copy this complete research repository to the aircraft. It also contains
+Gazebo/SITL launch files, batch experiments, analysis tools, tests, documents
+and optional navigation sources. Generate the allowlisted ROS1 aircraft
+workspace instead:
+
+```bash
+python3 tools/deployment/export_airborne_workspace.py \
+  /tmp/fixed_camera_airborne_ws \
+  --archive /tmp/fixed_camera_airborne_ws.tar.gz
+```
+
+The exported workspace contains the timestamped RK3588 detector, one validated
+RKNN model, the fixed-camera controller, radar approach/handover controller,
+their active configuration and the three field start modes. See
+`docs/代码结构与机载部署.md` and `deploy/airborne/README.md` for the exact
+boundary and installation procedure.
+
 > Fixed-camera development now lives in the new `fixed_camera_ibvs` node. The
 > original gimbal controllers remain unchanged as a comparison baseline.
 
@@ -19,7 +38,9 @@ The active FOV constraints use the measured test-aircraft half angles directly:
 horizontal `+/-26.6 deg` and vertical `+/-20.6 deg`.
 
 The fixed camera optical axis is mounted `20 deg` upward relative to aircraft
-forward, with zero roll/yaw offset (`camera_mount_pitch_deg: -20.0` in ROS FLU).
+forward.  The unified configuration exposes this directly as
+`camera_mount_upward_angle_deg: 20.0`; its three FLU body-frame offsets locate
+the camera optical centre relative to the aircraft reference centre.
 
 Build and launch:
 
@@ -39,6 +60,14 @@ roslaunch png_planner fixed_camera_ibvs.launch \
 
 `Detection.header.stamp` must be set when the camera frame is acquired, before
 asynchronous inference. No fixed image-delay estimate is used.
+
+The field detector implementation under `src/detection_msgs` is the complete
+RK3588/RKNN fixed-camera workspace version.  It includes the validated RKNN
+models, the preview/manual-recording entry points, and the Aegis MJPEG/ROS
+image gateway.  Every maintained entry point queues `(frame, capture_stamp)`
+through the asynchronous RKNN pool and publishes that original acquisition
+stamp on both tracked and `is_tracking=false` detections.  Inference completion
+time is never substituted for capture time.
 
 Configuration is in `src/png_planner/config/fixed_camera_ibvs.yaml`. Design,
 calibration order, and current limitations are documented in
@@ -72,9 +101,9 @@ Configuration and topic details are in
 `src/png_planner/config/radar_approach_handover.yaml` and
 `docs/radar_approach_handover.md`.
 
-The four groups of parameters that are expected to be tuned most often
+The five groups of parameters that are expected to be tuned most often
 (visual interception gains, interceptor command/dynamics limits, radar
-approach/handover, and FOV retention) are collected in
+approach/handover, FOV retention, and camera installation geometry) are collected in
 `src/png_planner/config/core_tuning.yaml`.  Production launches load this file
 after the complete base configurations, so its duplicate keys take priority.
 

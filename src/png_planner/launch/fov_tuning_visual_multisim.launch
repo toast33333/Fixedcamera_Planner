@@ -107,6 +107,7 @@
         output="screen"
         required="true"
         clear_params="true">
+    <rosparam command="load" file="$(arg core_tuning_config)" />
     <param name="results_dir" value="$(arg results_dir)" />
     <param name="sitl_xy_velocity_limit_mps" value="$(arg sitl_xy_velocity_limit_mps)" />
     <param name="interceptor_model" value="iris_1" />
@@ -122,7 +123,6 @@
     <param name="capture_distance_m" value="$(arg capture_distance_m)" />
     <param name="chase_timeout_s" value="$(arg chase_timeout_s)" />
     <param name="detection_range_m" value="$(arg detection_range_m)" />
-    <param name="camera_mount_pitch_deg" value="-20.0" />
     <param name="fov_horizontal_limit_deg" value="26.6" />
     <param name="fov_vertical_limit_deg" value="20.6" />
     <param name="gate_detection_until_chase" value="$(arg gate_detection_until_chase)" />

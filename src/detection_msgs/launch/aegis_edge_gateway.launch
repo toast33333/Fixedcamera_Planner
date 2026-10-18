@@ -1,0 +1,56 @@
+<launch>
+  <arg name="camera_id" default="$(optenv AEGIS_EDGE_CAMERA_ID 11)" />
+  <arg name="frame_width" default="$(optenv AEGIS_EDGE_FRAME_WIDTH 640)" />
+  <arg name="frame_height" default="$(optenv AEGIS_EDGE_FRAME_HEIGHT 480)" />
+  <arg name="request_fps" default="$(optenv AEGIS_EDGE_REQUEST_FPS 30)" />
+  <arg name="camera_buffer_size" default="$(optenv AEGIS_EDGE_CAMERA_BUFFER_SIZE 1)" />
+  <arg name="camera_flush_grabs" default="$(optenv AEGIS_EDGE_CAMERA_FLUSH_GRABS 0)" />
+  <arg name="stream_fps" default="$(optenv AEGIS_EDGE_STREAM_FPS 10)" />
+  <arg name="stream_quality" default="$(optenv AEGIS_EDGE_STREAM_QUALITY 45)" />
+  <arg name="stream_width" default="$(optenv AEGIS_EDGE_STREAM_WIDTH 512)" />
+  <arg name="stream_height" default="$(optenv AEGIS_EDGE_STREAM_HEIGHT 384)" />
+  <arg name="direct_stream" default="$(optenv AEGIS_EDGE_DIRECT_STREAM 1)" />
+  <arg name="direct_stream_port" default="$(optenv AEGIS_EDGE_DIRECT_STREAM_PORT 8080)" />
+  <arg name="publish_ros_image" default="$(optenv AEGIS_EDGE_PUBLISH_ROS_IMAGE 0)" />
+  <arg name="use_web_video_server" default="$(optenv AEGIS_EDGE_USE_WEB_VIDEO_SERVER false)" />
+  <arg name="model_path" default="$(optenv AEGIS_EDGE_MODEL_PATH $(find detection_msgs)/rknnModel/yolov8-NewDrone.rknn)" />
+  <arg name="tpes" default="$(optenv AEGIS_EDGE_TPES 1)" />
+  <arg name="pipeline_depth" default="$(optenv AEGIS_EDGE_PIPELINE_DEPTH 0)" />
+  <arg name="rosbridge_address" default="$(optenv AEGIS_EDGE_ROSBRIDGE_ADDRESS 0.0.0.0)" />
+  <arg name="rosbridge_port" default="$(optenv AEGIS_EDGE_ROSBRIDGE_PORT 9090)" />
+  <arg name="web_video_port" default="$(optenv AEGIS_EDGE_WEB_VIDEO_PORT 8080)" />
+  <arg name="detection_topic" default="/object_detections" />
+  <arg name="image_topic" default="/aegis/camera/annotated" />
+  <arg name="frame_id" default="aegis_camera" />
+
+  <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch">
+    <arg name="address" value="$(arg rosbridge_address)" />
+    <arg name="port" value="$(arg rosbridge_port)" />
+  </include>
+
+  <node pkg="web_video_server" type="web_video_server" name="aegis_web_video_server" output="screen" if="$(arg use_web_video_server)">
+    <param name="port" value="$(arg web_video_port)" />
+  </node>
+
+  <node pkg="detection_msgs" type="ros1Main_aegis_stream.py" name="aegis_edge_yolo_stream" output="screen">
+    <param name="camera_id" value="$(arg camera_id)" />
+    <param name="frame_width" value="$(arg frame_width)" />
+    <param name="frame_height" value="$(arg frame_height)" />
+    <param name="request_fps" value="$(arg request_fps)" />
+    <param name="camera_buffer_size" value="$(arg camera_buffer_size)" />
+    <param name="camera_flush_grabs" value="$(arg camera_flush_grabs)" />
+    <param name="stream_fps" value="$(arg stream_fps)" />
+    <param name="stream_quality" value="$(arg stream_quality)" />
+    <param name="stream_width" value="$(arg stream_width)" />
+    <param name="stream_height" value="$(arg stream_height)" />
+    <param name="direct_stream" value="$(arg direct_stream)" />
+    <param name="direct_stream_port" value="$(arg direct_stream_port)" />
+    <param name="publish_ros_image" value="$(arg publish_ros_image)" />
+    <param name="model_path" value="$(arg model_path)" />
+    <param name="tpes" value="$(arg tpes)" />
+    <param name="pipeline_depth" value="$(arg pipeline_depth)" />
+    <param name="detection_topic" value="$(arg detection_topic)" />
+    <param name="image_topic" value="$(arg image_topic)" />
+    <param name="frame_id" value="$(arg frame_id)" />
+  </node>
+</launch>

@@ -4,6 +4,12 @@ log/
 tmp/
 *.bag
 *.rknn
+# Only the validated field model is versioned and exported to the aircraft.
+# Alternative experiments and the duplicated legacy KCF models stay local.
+!src/detection_msgs/rknnModel/yolov8-NewDrone.rknn
+src/detection_msgs/scripts/*_old.py
+src/detection_msgs/scripts/*withVideo.py
+src/kcf_msgs/scripts/*.backup*
 *.zip
 *.pyc
 __pycache__/

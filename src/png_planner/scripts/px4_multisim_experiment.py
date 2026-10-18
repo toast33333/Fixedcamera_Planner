@@ -81,7 +81,15 @@ class FixedCameraMultisimExperiment:
         self.cy = float(rospy.get_param("~cy", 270.0))
         self.image_width = int(rospy.get_param("~image_width", 960))
         self.image_height = int(rospy.get_param("~image_height", 540))
-        self.mount_pitch_deg = float(rospy.get_param("~camera_mount_pitch_deg", -20.0))
+        legacy_mount_pitch_deg = float(
+            rospy.get_param("~camera_mount_pitch_deg", -20.0))
+        self.mount_upward_angle_deg = float(rospy.get_param(
+            "~camera_mount_upward_angle_deg", -legacy_mount_pitch_deg))
+        self.camera_offset_body = np.array([
+            float(rospy.get_param("~camera_offset_body_x_m", 0.0)),
+            float(rospy.get_param("~camera_offset_body_y_m", 0.0)),
+            float(rospy.get_param("~camera_offset_body_z_m", 0.0)),
+        ], dtype=float)
         self.horizontal_limit_deg = float(rospy.get_param("~fov_horizontal_limit_deg", 26.6))
         self.vertical_limit_deg = float(rospy.get_param("~fov_vertical_limit_deg", 20.6))
         self.detection_range_m = float(rospy.get_param("~detection_range_m", 30.0))
@@ -730,18 +738,23 @@ class FixedCameraMultisimExperiment:
         return self.sitl_velocity_limits_configured
 
     def project_target(self, interceptor_pose, target_pose):
-        delta_world = np.array([
+        airframe_delta_world = np.array([
             target_pose.position.x - interceptor_pose.position.x,
             target_pose.position.y - interceptor_pose.position.y,
             target_pose.position.z - interceptor_pose.position.z,
         ], dtype=float)
-        distance = float(np.linalg.norm(delta_world))
-        horizontal_distance = float(np.linalg.norm(delta_world[:2]))
-        if distance < 1.0e-6:
+        distance = float(np.linalg.norm(airframe_delta_world))
+        horizontal_distance = float(np.linalg.norm(airframe_delta_world[:2]))
+        camera_offset_world = quat_rotate(
+            interceptor_pose.orientation, self.camera_offset_body)
+        camera_delta_world = airframe_delta_world - camera_offset_world
+        camera_range = float(np.linalg.norm(camera_delta_world))
+        if camera_range < 1.0e-6:
             return distance, horizontal_distance, False, float("nan"), float("nan"), 99.0, 99.0
 
-        body = world_to_body(interceptor_pose.orientation, delta_world / distance)
-        angle = math.radians(-self.mount_pitch_deg)
+        body = world_to_body(
+            interceptor_pose.orientation, camera_delta_world / camera_range)
+        angle = math.radians(self.mount_upward_angle_deg)
         nominal_x = math.cos(angle) * body[0] + math.sin(angle) * body[2]
         nominal_y = body[1]
         nominal_z = -math.sin(angle) * body[0] + math.cos(angle) * body[2]
@@ -753,7 +766,7 @@ class FixedCameraMultisimExperiment:
         vertical_angle = math.atan2(camera_y, camera_z)
         horizontal_ratio = abs(math.degrees(horizontal_angle)) / self.horizontal_limit_deg
         vertical_ratio = abs(math.degrees(vertical_angle)) / self.vertical_limit_deg
-        visible = (camera_z > 0.0 and distance <= self.detection_range_m and
+        visible = (camera_z > 0.0 and camera_range <= self.detection_range_m and
                    horizontal_ratio <= 1.0 and vertical_ratio <= 1.0)
         if camera_z <= 1.0e-6:
             return distance, horizontal_distance, False, float("nan"), float("nan"), horizontal_ratio, vertical_ratio
@@ -874,7 +887,9 @@ class FixedCameraMultisimExperiment:
             cv2.circle(image, (pixel_x, pixel_y), 13, (0, 0, 220), 3)
             cv2.putText(image, "TARGET", (pixel_x + 18, pixel_y - 8),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 170), 2, cv2.LINE_AA)
-        cv2.putText(image, "Fixed camera: +20 deg | safe FOV: +/-26.6 x +/-20.6 deg",
+        cv2.putText(image, "Fixed camera: +%.1f deg | safe FOV: +/-%.1f x +/-%.1f deg" %
+                    (self.mount_upward_angle_deg, self.horizontal_limit_deg,
+                     self.vertical_limit_deg),
                     (22, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (20, 20, 20), 2, cv2.LINE_AA)
         cv2.putText(image, "Phase: %s   Range: %.1f m   Tracking: %s" %
                     (self.phase, distance, "YES" if visible else "NO"),

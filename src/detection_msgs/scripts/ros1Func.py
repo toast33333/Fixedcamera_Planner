@@ -1,5 +1,5 @@
-# 以下代码改自https://github.com/rockchip-linux/rknn-toolkit2/tree/master/examples/onnx/yolov5
 #!/usr/bin/env python3
+# 以下代码改自https://github.com/rockchip-linux/rknn-toolkit2/tree/master/examples/onnx/yolov5
 import cv2
 import numpy as np
 # 改为导入ROS1相关模块
@@ -183,79 +183,103 @@ def letterbox(im, new_shape=(640, 640), color=(0, 0, 0)):
                             cv2.BORDER_CONSTANT, value=color)
     return im, ratio, (left, top)
 
-# 修改：ROS1发布逻辑
-def myFunc(rknn_lite, IMG, publisher, capture_stamp):
+def new_detection(capture_stamp, frame_id):
+    """Create one detection tied to the source camera frame."""
+    msg = Detection()
+    msg.header.stamp = capture_stamp
+    msg.header.frame_id = frame_id
+    return msg
+
+
+def publish_tracking_lost(publisher, capture_stamp, frame_id):
+    msg = new_detection(capture_stamp, frame_id)
+    msg.is_tracking = False
+    publisher.publish(msg)
+
+
+# ROS1 publication keeps the camera acquisition time through asynchronous
+# RKNN inference.  The optional fallback preserves compatibility with older
+# callers, but every maintained entry point passes capture_stamp explicitly.
+def myFunc(rknn_lite, IMG, publisher, capture_stamp=None,
+           frame_id="camera_optical"):
+    if capture_stamp is None:
+        capture_stamp = rospy.Time.now()
     IMG2 = cv2.cvtColor(IMG, cv2.COLOR_BGR2RGB)
     IMG2, ratio, padding = letterbox(IMG2)
     IMG2 = np.expand_dims(IMG2, 0)
-    
+
     outputs = rknn_lite.inference(inputs=[IMG2], data_format=['nhwc'])
     boxes, classes, scores = yolov8_post_process(outputs)
 
-    if boxes is not None:
-        # 绘制检测结果
-        draw(IMG, boxes, scores, classes, ratio, padding)
+    # 没有检测到任何目标时，也发布一条空 Detection 消息。
+    if boxes is None or len(boxes) == 0:
+        publish_tracking_lost(publisher, capture_stamp, frame_id)
+        return IMG
 
-        # 新增：获取图像尺寸并检查有效性
-        img_height, img_width = IMG.shape[:2]  # OpenCV格式：(高, 宽)
-        if img_width <= 0 or img_height <= 0:
-            rospy.logwarn("图像尺寸无效，无法计算中心坐标")
-            return IMG
+    # 有检测结果时绘制检测框
+    draw(IMG, boxes, scores, classes, ratio, padding)
 
-       
-        center_x = img_width / 2.0 
-        center_y = img_height / 2.0
+    # 获取图像尺寸并检查有效性
+    img_height, img_width = IMG.shape[:2]
+    if img_width <= 0 or img_height <= 0:
+        rospy.logwarn("图像尺寸无效，无法计算中心坐标")
+        publish_tracking_lost(publisher, capture_stamp, frame_id)
+        return IMG
 
-        # 新增：检查缩放比例有效性（避免除零）
-        if ratio[0] <= 1e-9 or ratio[1] <= 1e-9:
-            rospy.logwarn("缩放比例异常，跳过坐标转换")
-            return IMG
+    center_x = img_width / 2.0
+    center_y = img_height / 2.0
 
+    # 检查缩放比例有效性（避免除零）
+    if ratio[0] <= 1e-9 or ratio[1] <= 1e-9:
+        rospy.logwarn("缩放比例异常，跳过坐标转换")
+        publish_tracking_lost(publisher, capture_stamp, frame_id)
+        return IMG
 
-        # 发布每个目标的检测数据到ROS1话题
-        for box, cls_idx, score in zip(boxes, classes, scores):
-            # 转换坐标到原始图像尺寸
-            x1, y1, x2, y2 = box
-            x1 = (x1 - padding[0]) / ratio[0]
-            y1 = (y1 - padding[1]) / ratio[1]
-            x2 = (x2 - padding[0]) / ratio[0]
-            y2 = (y2 - padding[1]) / ratio[1]
-            
-            # 确保坐标有效
-          
-            x1 = float(max(0, min(x1, img_width)))
-            y1 = float(max(0, min(y1, img_height)))
-            x2 = float(max(0, min(x2, img_width)))
-            y2 = float(max(0, min(y2, img_height)))
+    valid_target_published = False
 
-            # 新增：检查坐标有效性（避免NaN/无穷大）
-            if not (np.isfinite(x1) and np.isfinite(y1) and
-                    np.isfinite(x2) and np.isfinite(y2)):
-                rospy.logwarn("检测到无效坐标，跳过该目标")
-                continue
+    # 发布每个目标的检测数据到ROS1话题
+    for box, cls_idx, score in zip(boxes, classes, scores):
+        x1, y1, x2, y2 = box
+        x1 = (x1 - padding[0]) / ratio[0]
+        y1 = (y1 - padding[1]) / ratio[1]
+        x2 = (x2 - padding[0]) / ratio[0]
+        y2 = (y2 - padding[1]) / ratio[1]
 
+        # 限制坐标范围
+        x1 = float(max(0, min(x1, img_width)))
+        y1 = float(max(0, min(y1, img_height)))
+        x2 = float(max(0, min(x2, img_width)))
+        y2 = float(max(0, min(y2, img_height)))
 
+        # 检查坐标有效性
+        if not (np.isfinite(x1) and np.isfinite(y1) and
+                np.isfinite(x2) and np.isfinite(y2)):
+            rospy.logwarn("检测到无效坐标，跳过该目标")
+            continue
 
-            x1_rel = x1 - center_x
-            y1_rel = center_y - y1 
-            x2_rel = x2 - center_x 
-            y2_rel = center_y - y2
+        x1_rel = x1 - center_x
+        y1_rel = center_y - y1
+        x2_rel = x2 - center_x
+        y2_rel = center_y - y2
 
-            # 获取类别名称
-            class_name = CLASSES[int(cls_idx)] if int(cls_idx) < len(CLASSES) else "unknown"
-            
-            # 发布ROS1消息
-            msg = Detection()
-            msg.header.stamp = capture_stamp
-            msg.header.frame_id = "camera_optical"
-            msg.x1 = x1_rel
-            msg.y1 = y1_rel
-            msg.x2 = x2_rel
-            msg.y2 = y2_rel
-            msg.score = float(score)
-            msg.class_name = class_name
-            msg.track_id = 0
-            msg.is_tracking = True
-            publisher.publish(msg)  # 直接使用ROS1发布者发布消息
+        class_name = CLASSES[int(cls_idx)] if int(cls_idx) < len(CLASSES) else "unknown"
+
+        msg = new_detection(capture_stamp, frame_id)
+        msg.x1 = x1_rel
+        msg.y1 = y1_rel
+        msg.x2 = x2_rel
+        msg.y2 = y2_rel
+        msg.score = float(score)
+        msg.class_name = class_name
+        msg.track_id = 0
+        msg.is_tracking = True
+        publisher.publish(msg)
+
+        valid_target_published = True
+
+    # 如果 boxes 非空但最终没有任何有效目标被发布，
+    # 同样发送 is_tracking=False，避免下游沿用上一帧状态。
+    if not valid_target_published:
+        publish_tracking_lost(publisher, capture_stamp, frame_id)
 
     return IMG

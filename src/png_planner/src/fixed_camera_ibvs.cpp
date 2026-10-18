@@ -154,6 +154,14 @@ private:
 
         nh.param("camera_mount_roll_deg", camera_mount_roll_deg_, 0.0);
         nh.param("camera_mount_pitch_deg", camera_mount_pitch_deg_, -20.0);
+        double camera_mount_upward_angle_deg = 0.0;
+        if (nh.getParam("camera_mount_upward_angle_deg",
+                        camera_mount_upward_angle_deg)) {
+            // ROS body pitch is positive nose-down for the optical-axis
+            // rotation used below, so a user-facing positive upward angle is
+            // represented by a negative mount pitch.
+            camera_mount_pitch_deg_ = -camera_mount_upward_angle_deg;
+        }
         nh.param("camera_mount_yaw_deg", camera_mount_yaw_deg_, 0.0);
         nh.param("desired_u_offset_px", desired_u_offset_px_, 0.0);
         nh.param("desired_v_offset_px", desired_v_offset_px_, 0.0);

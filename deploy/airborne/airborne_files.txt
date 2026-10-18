@@ -1,0 +1,28 @@
+# Canonical files copied from the development repository into an aircraft
+# workspace.  Keep this as an explicit allowlist: simulation and analysis
+# files must never be added by a broad directory copy.
+src/detection_msgs/msg/Detection.msg
+src/detection_msgs/scripts/rknnpool.py
+src/detection_msgs/scripts/ros1Func.py
+src/detection_msgs/scripts/ros1Main_aegis_stream.py
+src/detection_msgs/launch/field_detector.launch
+src/detection_msgs/rknnModel/yolov8-NewDrone.rknn
+
+# Bbox is retained only for the controller's legacy input compatibility.
+# No old KCF tracker or duplicate model is deployed.
+src/kcf_msgs/msg/Bbox.msg
+
+src/png_planner/src/fixed_camera_ibvs.cpp
+src/png_planner/src/radar_approach_handover.cpp
+src/png_planner/src/los_rate_kalman.h
+src/png_planner/config/core_tuning.yaml
+src/png_planner/config/fixed_camera_ibvs.yaml
+src/png_planner/config/radar_approach_handover.yaml
+src/png_planner/launch/fixed_camera_ibvs.launch
+src/png_planner/launch/radar_approach_intercept.launch
+
+tools/field/README.md
+tools/field/start_visual_intercept.sh
+tools/field/start_intercept_full.sh
+tools/field/start_intercept_horizontal_only.sh
+tools/field/start_intercept_vertical_only.sh

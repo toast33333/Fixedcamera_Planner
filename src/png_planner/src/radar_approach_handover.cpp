@@ -150,6 +150,11 @@ private:
 
         nh.param("terminal_camera_range_m", terminal_camera_range_m_, 20.0);
         nh.param("camera_mount_pitch_deg", camera_mount_pitch_deg_, -20.0);
+        double camera_mount_upward_angle_deg = 0.0;
+        if (nh.getParam("camera_mount_upward_angle_deg",
+                        camera_mount_upward_angle_deg)) {
+            camera_mount_pitch_deg_ = -camera_mount_upward_angle_deg;
+        }
         nh.param("camera_mount_yaw_deg", camera_mount_yaw_deg_, 0.0);
         nh.param("camera_offset_body_x_m", camera_offset_body_x_m_, 0.0);
         nh.param("camera_offset_body_y_m", camera_offset_body_y_m_, 0.0);

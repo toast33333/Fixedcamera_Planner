@@ -12,7 +12,7 @@ class KCFRK3588Tracker:
         rospy.loginfo("ROS节点初始化完成，话题：/object_kcf")
 
         # 2. 初始化USB摄像头
-        self.cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
+        self.cap = cv2.VideoCapture(40, cv2.CAP_V4L2)
         if not self.cap.isOpened():
             rospy.logerr("无法打开USB摄像头，请检查连接和权限！")
             raise IOError("摄像头初始化失败")
