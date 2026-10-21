@@ -1,6 +1,7 @@
 <launch>
   <arg name="results_dir" default="/tmp/fixed_camera_multisim" />
   <arg name="core_tuning_config" default="$(find png_planner)/config/core_tuning.yaml" />
+  <arg name="enable_camera_pitch_servo" default="false" />
 
   <!-- PX4 instances are numbered 1 and 2 by sitl_multiple_run.sh. -->
   <group ns="interceptor">
@@ -26,6 +27,8 @@
         clear_params="true">
     <rosparam command="load" file="$(find png_planner)/config/fixed_camera_multisim.yaml" />
     <rosparam command="load" file="$(arg core_tuning_config)" />
+    <param name="enable_camera_pitch_servo" value="$(arg enable_camera_pitch_servo)" />
+    <param name="camera_pitch_servo_use_feedback" value="true" />
   </node>
 
   <node pkg="png_planner"
@@ -34,6 +37,7 @@
         output="screen"
         clear_params="true">
     <rosparam command="load" file="$(arg core_tuning_config)" />
+    <param name="enable_camera_pitch_servo" value="$(arg enable_camera_pitch_servo)" />
     <param name="results_dir" value="$(arg results_dir)" />
     <param name="sitl_xy_velocity_limit_mps" value="20.0" />
     <param name="interceptor_model" value="iris_1" />

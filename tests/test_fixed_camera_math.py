@@ -57,6 +57,25 @@ def ramp_forward_speed(active, target, acceleration_limit, dt):
     return min(target, active + acceleration_limit * max(dt, 0.0))
 
 
+def camera_axis_in_body(fixed_upward_deg, servo_relative_upward_deg):
+    total_upward = math.radians(
+        fixed_upward_deg + servo_relative_upward_deg)
+    return (
+        math.cos(total_upward),
+        0.0,
+        math.sin(total_upward),
+    )
+
+
+def vertical_image_angle_deg(target_body_elevation_deg,
+                             fixed_upward_deg,
+                             servo_relative_upward_deg):
+    # Positive image angle follows the project's centered-offset convention:
+    # positive is above the image centre.
+    return (target_body_elevation_deg - fixed_upward_deg -
+            servo_relative_upward_deg)
+
+
 class FixedCameraMathTest(unittest.TestCase):
     def test_optical_center_maps_to_body_forward(self):
         self.assertEqual(camera_to_body((0.0, 0.0, 1.0)), (1.0, 0.0, 0.0))
@@ -134,6 +153,33 @@ class FixedCameraMathTest(unittest.TestCase):
     def test_forward_speed_ramp_keeps_fov_deceleration_immediate(self):
         self.assertEqual(ramp_forward_speed(8.0, 3.5, 1.0, 0.02), 3.5)
         self.assertEqual(ramp_forward_speed(2.0, 8.0, 0.0, 0.02), 8.0)
+
+    def test_positive_servo_angle_raises_camera_axis(self):
+        neutral = camera_axis_in_body(20.0, 0.0)
+        raised = camera_axis_in_body(20.0, 10.0)
+        self.assertGreater(raised[2], neutral[2])
+        self.assertAlmostEqual(
+            math.degrees(math.atan2(raised[2], raised[0])),
+            30.0,
+            places=12,
+        )
+
+    def test_positive_vertical_image_error_needs_positive_servo_motion(self):
+        error_before = vertical_image_angle_deg(30.0, 20.0, 0.0)
+        error_after = vertical_image_angle_deg(30.0, 20.0, 10.0)
+        self.assertGreater(error_before, 0.0)
+        self.assertAlmostEqual(error_after, 0.0, places=12)
+
+    def test_servo_motion_does_not_move_neutral_aircraft_reference(self):
+        neutral_reference = camera_axis_in_body(20.0, 0.0)
+        moving_camera_axis = camera_axis_in_body(20.0, 12.0)
+        self.assertNotEqual(neutral_reference, moving_camera_axis)
+        self.assertAlmostEqual(
+            math.degrees(math.atan2(
+                neutral_reference[2], neutral_reference[0])),
+            20.0,
+            places=12,
+        )
 
 if __name__ == "__main__":
     unittest.main()

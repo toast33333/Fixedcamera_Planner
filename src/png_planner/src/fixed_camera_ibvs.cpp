@@ -31,6 +31,10 @@ double degToRad(double degrees) {
     return degrees * kPi / 180.0;
 }
 
+double radToDeg(double radians) {
+    return radians * 180.0 / kPi;
+}
+
 double wrapAngle(double angle) {
     while (angle > kPi) angle -= 2.0 * kPi;
     while (angle < -kPi) angle += 2.0 * kPi;
@@ -66,6 +70,13 @@ struct AttitudeSample {
     tf::Quaternion attitude;
 };
 
+struct CameraPitchSample {
+    ros::Time stamp;
+    // Relative to the mechanically neutral position. Positive means that the
+    // camera optical axis is raised in the aircraft body frame.
+    double relative_upward_deg = 0.0;
+};
+
 class FixedCameraIbvsController {
 public:
     explicit FixedCameraIbvsController(ros::NodeHandle& nh) {
@@ -93,6 +104,14 @@ public:
                  100.0 * fov_guard_center_area_ratio_,
                  fov_guard_yaw_gain_radps_, fov_guard_vertical_gain_mps_,
                  fov_guard_shape_max_);
+        if (enable_camera_pitch_servo_) {
+            ROS_INFO("[FixedCameraIBVS] Single-axis camera pitch servo enabled: "
+                     "command=%s (relative deg, positive up), feedback=%s, "
+                     "limits=[%.1f, %.1f] deg.",
+                     camera_pitch_servo_command_topic_.c_str(),
+                     camera_pitch_servo_feedback_topic_.c_str(),
+                     camera_pitch_servo_min_deg_, camera_pitch_servo_max_deg_);
+        }
     }
 
     void spin() {
@@ -105,7 +124,11 @@ public:
             if (dt <= 0.0 || dt > 0.5) dt = step_dt_;
             last_control_time_ = now;
 
+            recordCameraPitchSample(
+                now, currentCameraPitchAngleDeg(now));
+
             if (!have_pose_) {
+                updateCameraPitchServoReturn(now, dt);
                 rate.sleep();
                 continue;
             }
@@ -114,6 +137,7 @@ public:
                 (!state_valid_ || state_valid_stamp_.isZero() ||
                  (now - state_valid_stamp_).toSec() > state_valid_timeout_sec_)) {
                 resetLosStateIfNeeded();
+                updateCameraPitchServoReturn(now, dt);
                 publishInvalidStateCommand(now);
                 ROS_WARN_THROTTLE(1.0,
                                   "[FixedCameraIBVS] State estimate invalid or stale; "
@@ -132,6 +156,7 @@ public:
 
             if (!target_valid || !have_world_los_) {
                 resetLosStateIfNeeded();
+                updateCameraPitchServoReturn(now, dt);
                 publishLostTargetCommand(now);
                 rate.sleep();
                 continue;
@@ -165,6 +190,55 @@ private:
         nh.param("camera_mount_yaw_deg", camera_mount_yaw_deg_, 0.0);
         nh.param("desired_u_offset_px", desired_u_offset_px_, 0.0);
         nh.param("desired_v_offset_px", desired_v_offset_px_, 0.0);
+
+        // Optional single-axis, body-relative camera pitch actuator.  The ROS
+        // interface is deliberately hardware-agnostic: a later PWM/serial
+        // adapter only needs to translate the relative angle command.
+        nh.param("enable_camera_pitch_servo", enable_camera_pitch_servo_, false);
+        nh.param<std::string>(
+            "camera_pitch_servo_command_topic",
+            camera_pitch_servo_command_topic_,
+            "/camera_pitch_servo/command_deg");
+        nh.param<std::string>(
+            "camera_pitch_servo_feedback_topic",
+            camera_pitch_servo_feedback_topic_,
+            "/camera_pitch_servo/feedback_deg");
+        nh.param<std::string>(
+            "camera_pitch_servo_state_topic",
+            camera_pitch_servo_state_topic_,
+            "/fixed_camera_ibvs/camera_pitch_servo_state");
+        nh.param("camera_pitch_servo_use_feedback",
+                 camera_pitch_servo_use_feedback_, false);
+        nh.param("camera_pitch_servo_feedback_timeout_sec",
+                 camera_pitch_servo_feedback_timeout_sec_, 0.20);
+        nh.param("camera_pitch_servo_initialize_from_feedback",
+                 camera_pitch_servo_initialize_from_feedback_, true);
+        nh.param("camera_pitch_servo_neutral_deg",
+                 camera_pitch_servo_neutral_deg_, 0.0);
+        nh.param("camera_pitch_servo_min_deg",
+                 camera_pitch_servo_min_deg_, -25.0);
+        nh.param("camera_pitch_servo_max_deg",
+                 camera_pitch_servo_max_deg_, 25.0);
+        nh.param("camera_pitch_servo_kp_per_sec",
+                 camera_pitch_servo_kp_per_sec_, 3.0);
+        nh.param("camera_pitch_servo_ki_per_sec2",
+                 camera_pitch_servo_ki_per_sec2_, 0.0);
+        nh.param("camera_pitch_servo_kd",
+                 camera_pitch_servo_kd_, 0.05);
+        nh.param("camera_pitch_servo_integral_limit_deg_sec",
+                 camera_pitch_servo_integral_limit_deg_sec_, 10.0);
+        nh.param("camera_pitch_servo_derivative_alpha",
+                 camera_pitch_servo_derivative_alpha_, 0.2);
+        nh.param("camera_pitch_servo_integral_decay",
+                 camera_pitch_servo_integral_decay_, 0.98);
+        nh.param("camera_pitch_servo_deadband_deg",
+                 camera_pitch_servo_deadband_deg_, 0.4);
+        nh.param("camera_pitch_servo_max_rate_degps",
+                 camera_pitch_servo_max_rate_degps_, 60.0);
+        nh.param("camera_pitch_servo_return_on_loss",
+                 camera_pitch_servo_return_on_loss_, true);
+        nh.param("camera_pitch_servo_return_rate_degps",
+                 camera_pitch_servo_return_rate_degps_, 20.0);
 
         nh.param("V_default", forward_speed_, 5.0);
         nh.param("lost_forward_speed", lost_forward_speed_, forward_speed_);
@@ -312,6 +386,32 @@ private:
         fov_slowdown_start_ratio_ = clampValue(fov_slowdown_start_ratio_, 0.0, 0.99);
         fov_min_forward_speed_ratio_ = clampValue(fov_min_forward_speed_ratio_, 0.0, 1.0);
         fov_emergency_yaw_ratio_ = clampValue(fov_emergency_yaw_ratio_, 0.0, 1.0);
+        if (camera_pitch_servo_min_deg_ > camera_pitch_servo_max_deg_) {
+            std::swap(camera_pitch_servo_min_deg_, camera_pitch_servo_max_deg_);
+        }
+        camera_pitch_servo_neutral_deg_ = clampValue(
+            camera_pitch_servo_neutral_deg_,
+            camera_pitch_servo_min_deg_, camera_pitch_servo_max_deg_);
+        camera_pitch_servo_command_deg_ = camera_pitch_servo_neutral_deg_;
+        camera_pitch_servo_feedback_timeout_sec_ =
+            std::max(camera_pitch_servo_feedback_timeout_sec_, 0.02);
+        camera_pitch_servo_kp_per_sec_ =
+            std::max(camera_pitch_servo_kp_per_sec_, 0.0);
+        camera_pitch_servo_ki_per_sec2_ =
+            std::max(camera_pitch_servo_ki_per_sec2_, 0.0);
+        camera_pitch_servo_kd_ = std::max(camera_pitch_servo_kd_, 0.0);
+        camera_pitch_servo_integral_limit_deg_sec_ =
+            std::max(camera_pitch_servo_integral_limit_deg_sec_, 0.0);
+        camera_pitch_servo_derivative_alpha_ = clampValue(
+            camera_pitch_servo_derivative_alpha_, 0.0, 1.0);
+        camera_pitch_servo_integral_decay_ = clampValue(
+            camera_pitch_servo_integral_decay_, 0.0, 1.0);
+        camera_pitch_servo_deadband_deg_ =
+            std::max(camera_pitch_servo_deadband_deg_, 0.0);
+        camera_pitch_servo_max_rate_degps_ =
+            std::max(camera_pitch_servo_max_rate_degps_, 0.0);
+        camera_pitch_servo_return_rate_degps_ =
+            std::max(camera_pitch_servo_return_rate_degps_, 0.0);
         control_rate_hz_ = std::max(control_rate_hz_, 1.0);
         step_dt_ = std::max(step_dt_, 1e-3);
         lost_timeout_sec_ = std::max(lost_timeout_sec_, 0.02);
@@ -320,16 +420,14 @@ private:
     }
 
     void configureCameraMount() {
-        camera_mount_rotation_.setRPY(
-            degToRad(camera_mount_roll_deg_),
-            degToRad(camera_mount_pitch_deg_),
-            degToRad(camera_mount_yaw_deg_));
-
         const double desired_v_optical =
             y_up_positive_ ? -desired_v_offset_px_ : desired_v_offset_px_;
         const tf::Vector3 desired_camera(
             desired_u_offset_px_ / fx_, desired_v_optical / fy_, 1.0);
-        desired_los_body_ = cameraRayToBody(desired_camera);
+        // The aircraft guidance reference remains the neutral camera axis.
+        // Servo motion gives fast view retention, while the slower aircraft
+        // vertical channel naturally unloads the servo back toward neutral.
+        desired_los_body_ = cameraRayToBody(desired_camera, 0.0);
     }
 
     void configureFilters() {
@@ -366,6 +464,12 @@ private:
                 state_valid_topic_, 10,
                 &FixedCameraIbvsController::stateValidCallback, this);
         }
+        if (enable_camera_pitch_servo_ && camera_pitch_servo_use_feedback_) {
+            camera_pitch_servo_feedback_sub_ = nh.subscribe(
+                camera_pitch_servo_feedback_topic_, 10,
+                &FixedCameraIbvsController::cameraPitchServoFeedbackCallback,
+                this);
+        }
         command_pub_ = nh.advertise<geometry_msgs::TwistStamped>(command_topic_, 1);
         los_debug_pub_ = nh.advertise<geometry_msgs::Vector3Stamped>(los_debug_topic_, 1);
         fov_debug_pub_ = nh.advertise<geometry_msgs::Vector3Stamped>(fov_debug_topic_, 1);
@@ -373,24 +477,130 @@ private:
             nh.advertise<geometry_msgs::TwistStamped>(nominal_command_debug_topic_, 1);
         fov_correction_debug_pub_ =
             nh.advertise<geometry_msgs::TwistStamped>(fov_correction_debug_topic_, 1);
+        if (enable_camera_pitch_servo_) {
+            camera_pitch_servo_command_pub_ =
+                nh.advertise<std_msgs::Float64>(
+                    camera_pitch_servo_command_topic_, 1, true);
+            camera_pitch_servo_state_pub_ =
+                nh.advertise<geometry_msgs::Vector3Stamped>(
+                    camera_pitch_servo_state_topic_, 1);
+        }
     }
 
-    tf::Vector3 cameraRayToBody(const tf::Vector3& camera_ray) const {
+    tf::Matrix3x3 cameraMountRotation(double servo_relative_upward_deg) const {
+        tf::Matrix3x3 fixed_mount_rotation;
+        fixed_mount_rotation.setRPY(
+            degToRad(camera_mount_roll_deg_),
+            degToRad(camera_mount_pitch_deg_),
+            degToRad(camera_mount_yaw_deg_));
+        tf::Matrix3x3 servo_rotation;
+        servo_rotation.setRPY(
+            0.0, degToRad(-servo_relative_upward_deg), 0.0);
+        // The actuator rotates about the camera mount's local pitch axis. This
+        // multiplication also remains correct if a later installation uses a
+        // non-zero fixed roll or yaw correction.
+        return fixed_mount_rotation * servo_rotation;
+    }
+
+    tf::Vector3 cameraRayToBody(
+        const tf::Vector3& camera_ray,
+        double servo_relative_upward_deg) const {
         // ROS optical frame: +x right, +y down, +z forward.
         // ROS body FLU frame: +x forward, +y left, +z up.
         const tf::Vector3 nominal_body(
             camera_ray.z(), -camera_ray.x(), -camera_ray.y());
-        return normalizedOr(camera_mount_rotation_ * nominal_body,
+        return normalizedOr(
+            cameraMountRotation(servo_relative_upward_deg) * nominal_body,
                             tf::Vector3(1.0, 0.0, 0.0));
     }
 
-    tf::Vector3 bodyRayToCamera(const tf::Vector3& body_ray) const {
-        const tf::Vector3 nominal_body = camera_mount_rotation_.transpose() * body_ray;
+    tf::Vector3 bodyRayToCamera(
+        const tf::Vector3& body_ray,
+        double servo_relative_upward_deg) const {
+        const tf::Vector3 nominal_body =
+            cameraMountRotation(servo_relative_upward_deg).transpose() * body_ray;
         return normalizedOr(tf::Vector3(
                                 -nominal_body.y(),
                                 -nominal_body.z(),
                                 nominal_body.x()),
                             tf::Vector3(0.0, 0.0, 1.0));
+    }
+
+    double currentCameraPitchAngleDeg(const ros::Time& now) const {
+        if (!enable_camera_pitch_servo_) return 0.0;
+        if (camera_pitch_servo_use_feedback_) {
+            if (have_camera_pitch_servo_feedback_ &&
+                (now - camera_pitch_servo_feedback_stamp_).toSec() <=
+                    camera_pitch_servo_feedback_timeout_sec_) {
+                return camera_pitch_servo_feedback_deg_;
+            }
+            ROS_WARN_THROTTLE(
+                1.0,
+                "[FixedCameraIBVS] Camera pitch feedback is missing/stale; "
+                "using the rate-limited command as the angle estimate.");
+        }
+        return camera_pitch_servo_command_deg_;
+    }
+
+    void recordCameraPitchSample(const ros::Time& stamp,
+                                 double relative_upward_deg) {
+        // With /use_sim_time, ROS time is exactly zero until Gazebo publishes
+        // the first /clock sample. Subtracting a history duration from that
+        // zero stamp would underflow ros::Time and terminate the node.
+        if (stamp.isZero()) return;
+        CameraPitchSample sample;
+        sample.stamp = stamp;
+        sample.relative_upward_deg = relative_upward_deg;
+        if (!camera_pitch_history_.empty() &&
+            sample.stamp == camera_pitch_history_.back().stamp) {
+            camera_pitch_history_.back() = sample;
+        } else if (camera_pitch_history_.empty() ||
+                   sample.stamp > camera_pitch_history_.back().stamp) {
+            camera_pitch_history_.push_back(sample);
+        }
+        const ros::Time oldest_allowed = stamp - ros::Duration(pose_history_sec_);
+        while (camera_pitch_history_.size() > 2 &&
+               camera_pitch_history_[1].stamp < oldest_allowed) {
+            camera_pitch_history_.pop_front();
+        }
+    }
+
+    bool lookupCameraPitchAngle(const ros::Time& stamp,
+                                double& relative_upward_deg) const {
+        if (!enable_camera_pitch_servo_) {
+            relative_upward_deg = 0.0;
+            return true;
+        }
+        if (camera_pitch_history_.empty()) {
+            relative_upward_deg = camera_pitch_servo_command_deg_;
+            return false;
+        }
+        if (stamp <= camera_pitch_history_.front().stamp) {
+            relative_upward_deg =
+                camera_pitch_history_.front().relative_upward_deg;
+            return true;
+        }
+        if (stamp >= camera_pitch_history_.back().stamp) {
+            relative_upward_deg =
+                camera_pitch_history_.back().relative_upward_deg;
+            return true;
+        }
+        for (std::size_t i = 1; i < camera_pitch_history_.size(); ++i) {
+            const CameraPitchSample& newer = camera_pitch_history_[i];
+            if (newer.stamp < stamp) continue;
+            const CameraPitchSample& older = camera_pitch_history_[i - 1];
+            const double interval = (newer.stamp - older.stamp).toSec();
+            const double ratio = interval > 1e-6
+                ? clampValue((stamp - older.stamp).toSec() / interval,
+                             0.0, 1.0)
+                : 0.0;
+            relative_upward_deg =
+                older.relative_upward_deg + ratio *
+                    (newer.relative_upward_deg - older.relative_upward_deg);
+            return true;
+        }
+        relative_upward_deg = camera_pitch_history_.back().relative_upward_deg;
+        return false;
     }
 
     bool lookupAttitude(const ros::Time& stamp, tf::Quaternion& attitude) const {
@@ -429,9 +639,12 @@ private:
 
         const tf::Vector3 camera_ray(
             centered_u / fx_, optical_v / fy_, 1.0);
-        const tf::Vector3 los_body_at_capture = cameraRayToBody(camera_ray);
-
         const ros::Time capture_time = last_detection_capture_time_;
+        double capture_camera_pitch_deg = 0.0;
+        lookupCameraPitchAngle(capture_time, capture_camera_pitch_deg);
+        const tf::Vector3 los_body_at_capture = cameraRayToBody(
+            camera_ray, capture_camera_pitch_deg);
+
         tf::Quaternion capture_attitude = current_attitude_;
         if (enable_attitude_compensation_) {
             if (!lookupAttitude(capture_time, capture_attitude)) {
@@ -537,6 +750,115 @@ private:
         return active_speed;
     }
 
+    void publishCameraPitchServoState(const ros::Time& stamp,
+                                      double used_relative_upward_deg) {
+        if (!enable_camera_pitch_servo_) return;
+
+        std_msgs::Float64 command;
+        command.data = camera_pitch_servo_command_deg_;
+        camera_pitch_servo_command_pub_.publish(command);
+
+        geometry_msgs::Vector3Stamped state;
+        state.header.stamp = stamp;
+        state.header.frame_id = "camera_pitch_servo";
+        state.vector.x = camera_pitch_servo_command_deg_;
+        state.vector.y = used_relative_upward_deg;
+        state.vector.z = -camera_mount_pitch_deg_ + used_relative_upward_deg;
+        camera_pitch_servo_state_pub_.publish(state);
+    }
+
+    void resetCameraPitchServoControllerState() {
+        camera_pitch_servo_error_integral_deg_sec_ = 0.0;
+        camera_pitch_servo_error_previous_deg_ = 0.0;
+        camera_pitch_servo_error_derivative_degps_ = 0.0;
+        camera_pitch_servo_error_initialized_ = false;
+        camera_pitch_servo_rate_command_degps_ = 0.0;
+    }
+
+    void updateCameraPitchServoTracking(const ros::Time& now,
+                                        double dt,
+                                        double predicted_input_v) {
+        if (!enable_camera_pitch_servo_) return;
+
+        // Positive image vertical error means that the target is above the
+        // requested image point.  Positive actuator command raises the camera,
+        // so the sign is intentionally positive here.
+        double error_deg = radToDeg(
+            std::atan2(predicted_input_v, fy_) -
+            std::atan2(desired_v_offset_px_, fy_));
+        if (std::fabs(error_deg) <= camera_pitch_servo_deadband_deg_) {
+            error_deg = 0.0;
+            camera_pitch_servo_error_integral_deg_sec_ *=
+                camera_pitch_servo_integral_decay_;
+        } else {
+            camera_pitch_servo_error_integral_deg_sec_ += error_deg * dt;
+            camera_pitch_servo_error_integral_deg_sec_ = clampValue(
+                camera_pitch_servo_error_integral_deg_sec_,
+                -camera_pitch_servo_integral_limit_deg_sec_,
+                camera_pitch_servo_integral_limit_deg_sec_);
+        }
+
+        double error_derivative_degps = 0.0;
+        if (camera_pitch_servo_error_initialized_ && dt > 1e-6) {
+            error_derivative_degps =
+                (error_deg - camera_pitch_servo_error_previous_deg_) / dt;
+        }
+        camera_pitch_servo_error_derivative_degps_ =
+            camera_pitch_servo_derivative_alpha_ * error_derivative_degps +
+            (1.0 - camera_pitch_servo_derivative_alpha_) *
+                camera_pitch_servo_error_derivative_degps_;
+        camera_pitch_servo_error_previous_deg_ = error_deg;
+        camera_pitch_servo_error_initialized_ = true;
+
+        camera_pitch_servo_rate_command_degps_ = clampValue(
+            camera_pitch_servo_kp_per_sec_ * error_deg +
+                camera_pitch_servo_ki_per_sec2_ *
+                    camera_pitch_servo_error_integral_deg_sec_ +
+                camera_pitch_servo_kd_ *
+                    camera_pitch_servo_error_derivative_degps_,
+            -camera_pitch_servo_max_rate_degps_,
+            camera_pitch_servo_max_rate_degps_);
+
+        const double raw_command = camera_pitch_servo_command_deg_ +
+            camera_pitch_servo_rate_command_degps_ * dt;
+        const double limited_command = clampValue(
+            raw_command,
+            camera_pitch_servo_min_deg_, camera_pitch_servo_max_deg_);
+        if (std::fabs(raw_command - limited_command) > 1e-9) {
+            // Avoid integral wind-up while the target is asking the servo to
+            // move beyond its mechanical stop.  The aircraft vertical/FOV
+            // channel remains active and can unload the saturated servo.
+            camera_pitch_servo_error_integral_deg_sec_ *=
+                camera_pitch_servo_integral_decay_;
+        }
+        camera_pitch_servo_command_deg_ = limited_command;
+
+        const double used_angle = currentCameraPitchAngleDeg(now);
+        recordCameraPitchSample(now, used_angle);
+        publishCameraPitchServoState(now, used_angle);
+    }
+
+    void updateCameraPitchServoReturn(const ros::Time& now, double dt) {
+        if (!enable_camera_pitch_servo_) return;
+        resetCameraPitchServoControllerState();
+
+        if (camera_pitch_servo_return_on_loss_) {
+            const double maximum_step =
+                camera_pitch_servo_return_rate_degps_ * std::max(dt, 0.0);
+            const double error =
+                camera_pitch_servo_neutral_deg_ - camera_pitch_servo_command_deg_;
+            camera_pitch_servo_command_deg_ += clampValue(
+                error, -maximum_step, maximum_step);
+            camera_pitch_servo_command_deg_ = clampValue(
+                camera_pitch_servo_command_deg_,
+                camera_pitch_servo_min_deg_, camera_pitch_servo_max_deg_);
+        }
+
+        const double used_angle = currentCameraPitchAngleDeg(now);
+        recordCameraPitchSample(now, used_angle);
+        publishCameraPitchServoState(now, used_angle);
+    }
+
     void publishTrackingCommand(const ros::Time& now, double dt) {
         const tf::Vector3 los_world = predictedWorldLos(now);
         const tf::Matrix3x3 world_from_body(
@@ -546,7 +868,10 @@ private:
         const tf::Vector3 los_body = normalizedOr(
             world_from_body.transpose() * los_world,
             tf::Vector3(1.0, 0.0, 0.0));
-        const tf::Vector3 los_camera = bodyRayToCamera(los_body);
+        const double current_camera_pitch_deg =
+            currentCameraPitchAngleDeg(now);
+        const tf::Vector3 los_camera = bodyRayToCamera(
+            los_body, current_camera_pitch_deg);
 
         const double safe_h =
             std::max(degToRad(fov_horizontal_limit_deg_), 1e-3);
@@ -559,7 +884,8 @@ private:
         const double active_horizontal_ratio =
             enable_horizontal_control_ ? horizontal_ratio : 0.0;
         const double active_vertical_ratio =
-            enable_height_control_ ? vertical_ratio : 0.0;
+            (enable_height_control_ || enable_camera_pitch_servo_)
+                ? vertical_ratio : 0.0;
         const double fov_ratio =
             std::max(active_horizontal_ratio, active_vertical_ratio);
 
@@ -595,7 +921,8 @@ private:
             ? computeAxisFovBarrierShape(
                   horizontal_pixel_error, horizontal_view_half_extent_px)
             : 0.0;
-        const double vertical_guard_shape = enable_height_control_
+        const double vertical_guard_shape =
+            (enable_height_control_ || enable_camera_pitch_servo_)
             ? computeAxisFovBarrierShape(
                   vertical_pixel_error, vertical_view_half_extent_px)
             : 0.0;
@@ -608,6 +935,8 @@ private:
         const bool fov_guard_active = fov_guard_shape > 0.0;
         const double speed_scale = fov_guard_active
             ? computeForwardSpeedScale(fov_ratio) : 1.0;
+
+        updateCameraPitchServoTracking(now, dt, predicted_input_v);
 
         updateYawEnableState();
         const bool fov_emergency = fov_ratio >= fov_emergency_yaw_ratio_;
@@ -926,6 +1255,23 @@ private:
                           (requested - forward_speed_);
     }
 
+    void cameraPitchServoFeedbackCallback(
+        const std_msgs::Float64::ConstPtr& message) {
+        if (!std::isfinite(message->data)) return;
+        const ros::Time now = ros::Time::now();
+        const double feedback = clampValue(
+            message->data,
+            camera_pitch_servo_min_deg_, camera_pitch_servo_max_deg_);
+        if (!have_camera_pitch_servo_feedback_ &&
+            camera_pitch_servo_initialize_from_feedback_) {
+            camera_pitch_servo_command_deg_ = feedback;
+        }
+        camera_pitch_servo_feedback_deg_ = feedback;
+        camera_pitch_servo_feedback_stamp_ = now;
+        have_camera_pitch_servo_feedback_ = true;
+        recordCameraPitchSample(now, feedback);
+    }
+
     void stateValidCallback(const std_msgs::Bool::ConstPtr& message) {
         state_valid_ = message->data;
         state_valid_stamp_ = ros::Time::now();
@@ -944,8 +1290,41 @@ private:
     double camera_mount_yaw_deg_ = 0.0;
     double desired_u_offset_px_ = 0.0;
     double desired_v_offset_px_ = 0.0;
-    tf::Matrix3x3 camera_mount_rotation_;
     tf::Vector3 desired_los_body_{1.0, 0.0, 0.0};
+
+    bool enable_camera_pitch_servo_ = false;
+    bool camera_pitch_servo_use_feedback_ = false;
+    bool camera_pitch_servo_initialize_from_feedback_ = true;
+    bool camera_pitch_servo_return_on_loss_ = true;
+    std::string camera_pitch_servo_command_topic_ =
+        "/camera_pitch_servo/command_deg";
+    std::string camera_pitch_servo_feedback_topic_ =
+        "/camera_pitch_servo/feedback_deg";
+    std::string camera_pitch_servo_state_topic_ =
+        "/fixed_camera_ibvs/camera_pitch_servo_state";
+    double camera_pitch_servo_feedback_timeout_sec_ = 0.20;
+    double camera_pitch_servo_neutral_deg_ = 0.0;
+    double camera_pitch_servo_min_deg_ = -25.0;
+    double camera_pitch_servo_max_deg_ = 25.0;
+    double camera_pitch_servo_kp_per_sec_ = 3.0;
+    double camera_pitch_servo_ki_per_sec2_ = 0.0;
+    double camera_pitch_servo_kd_ = 0.05;
+    double camera_pitch_servo_integral_limit_deg_sec_ = 10.0;
+    double camera_pitch_servo_derivative_alpha_ = 0.2;
+    double camera_pitch_servo_integral_decay_ = 0.98;
+    double camera_pitch_servo_deadband_deg_ = 0.4;
+    double camera_pitch_servo_max_rate_degps_ = 60.0;
+    double camera_pitch_servo_return_rate_degps_ = 20.0;
+    double camera_pitch_servo_command_deg_ = 0.0;
+    double camera_pitch_servo_feedback_deg_ = 0.0;
+    double camera_pitch_servo_error_integral_deg_sec_ = 0.0;
+    double camera_pitch_servo_error_previous_deg_ = 0.0;
+    double camera_pitch_servo_error_derivative_degps_ = 0.0;
+    double camera_pitch_servo_rate_command_degps_ = 0.0;
+    bool camera_pitch_servo_error_initialized_ = false;
+    bool have_camera_pitch_servo_feedback_ = false;
+    ros::Time camera_pitch_servo_feedback_stamp_;
+    std::deque<CameraPitchSample> camera_pitch_history_;
 
     double forward_speed_ = 5.0;
     double lost_forward_speed_ = 5.0;
@@ -1046,11 +1425,14 @@ private:
     ros::Subscriber velocity_sub_;
     ros::Subscriber forward_speed_sub_;
     ros::Subscriber state_valid_sub_;
+    ros::Subscriber camera_pitch_servo_feedback_sub_;
     ros::Publisher command_pub_;
     ros::Publisher los_debug_pub_;
     ros::Publisher fov_debug_pub_;
     ros::Publisher nominal_command_debug_pub_;
     ros::Publisher fov_correction_debug_pub_;
+    ros::Publisher camera_pitch_servo_command_pub_;
+    ros::Publisher camera_pitch_servo_state_pub_;
 };
 
 int main(int argc, char** argv) {

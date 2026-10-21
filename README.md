@@ -259,6 +259,10 @@ roslaunch png_planner pixel_dotpng_3d_pro.launch detection_mode:=1
 roslaunch png_planner yaw_tracker.launch detection_mode:=1 detection_topic:=/my_detection
 ```
 
+## 可选单轴相机俯仰舵机
+
+视觉控制器现在带有一个硬件无关、默认关闭的单轴俯仰舵机层。它输出相对机身的相机角度指令，飞机原有偏航和竖直导引通道保持不变；Gazebo 实验节点同时提供限速和一阶滞后的舵机/反馈模型，便于在硬件接口完成前验证。接口、参数、公式和仿真开关见 `docs/SINGLE_AXIS_CAMERA_PITCH_SERVO.md`。
+
 ## 相关脚本与资源
 
 - `src/png_planner/scripts/pose_cmd_tf_broadcaster.py`

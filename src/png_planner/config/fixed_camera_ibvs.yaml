@@ -21,6 +21,31 @@ camera_mount_yaw_deg: 0.0
 desired_u_offset_px: 0.0
 desired_v_offset_px: 0.0
 
+# Optional single-axis camera pitch servo. It is disabled until the real
+# PWM/serial adapter is available, so the current fixed-camera behaviour is
+# unchanged. Both command and feedback are angles relative to the mechanical
+# neutral position in degrees; positive means that the camera looks farther up.
+enable_camera_pitch_servo: false
+camera_pitch_servo_command_topic: /camera_pitch_servo/command_deg
+camera_pitch_servo_feedback_topic: /camera_pitch_servo/feedback_deg
+camera_pitch_servo_state_topic: /fixed_camera_ibvs/camera_pitch_servo_state
+camera_pitch_servo_use_feedback: false
+camera_pitch_servo_feedback_timeout_sec: 0.20
+camera_pitch_servo_initialize_from_feedback: true
+camera_pitch_servo_neutral_deg: 0.0
+camera_pitch_servo_min_deg: -25.0
+camera_pitch_servo_max_deg: 25.0
+camera_pitch_servo_kp_per_sec: 3.0
+camera_pitch_servo_ki_per_sec2: 0.0
+camera_pitch_servo_kd: 0.05
+camera_pitch_servo_integral_limit_deg_sec: 10.0
+camera_pitch_servo_derivative_alpha: 0.2
+camera_pitch_servo_integral_decay: 0.98
+camera_pitch_servo_deadband_deg: 0.4
+camera_pitch_servo_max_rate_degps: 60.0
+camera_pitch_servo_return_on_loss: true
+camera_pitch_servo_return_rate_degps: 20.0
+
 # Existing velocity-controller interface
 pose_topic: /mavros/local_position/pose
 attitude_topic: /mavros/imu/data

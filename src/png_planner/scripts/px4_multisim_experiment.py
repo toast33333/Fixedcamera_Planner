@@ -31,7 +31,7 @@ from mavros_msgs.msg import ParamValue, State
 from mavros_msgs.srv import CommandBool, ParamSet, SetMode
 from nav_msgs.msg import Path
 from sensor_msgs.msg import Image
-from std_msgs.msg import Bool, Float32, String
+from std_msgs.msg import Bool, Float32, Float64, String
 from visualization_msgs.msg import Marker, MarkerArray
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -90,6 +90,39 @@ class FixedCameraMultisimExperiment:
             float(rospy.get_param("~camera_offset_body_y_m", 0.0)),
             float(rospy.get_param("~camera_offset_body_z_m", 0.0)),
         ], dtype=float)
+        self.enable_camera_pitch_servo = bool(
+            rospy.get_param("~enable_camera_pitch_servo", False))
+        self.camera_pitch_servo_command_topic = rospy.get_param(
+            "~camera_pitch_servo_command_topic",
+            "/camera_pitch_servo/command_deg")
+        self.camera_pitch_servo_feedback_topic = rospy.get_param(
+            "~camera_pitch_servo_feedback_topic",
+            "/camera_pitch_servo/feedback_deg")
+        self.camera_pitch_servo_neutral_deg = float(rospy.get_param(
+            "~camera_pitch_servo_neutral_deg", 0.0))
+        self.camera_pitch_servo_min_deg = float(rospy.get_param(
+            "~camera_pitch_servo_min_deg", -25.0))
+        self.camera_pitch_servo_max_deg = float(rospy.get_param(
+            "~camera_pitch_servo_max_deg", 25.0))
+        if self.camera_pitch_servo_min_deg > self.camera_pitch_servo_max_deg:
+            (self.camera_pitch_servo_min_deg,
+             self.camera_pitch_servo_max_deg) = (
+                self.camera_pitch_servo_max_deg,
+                self.camera_pitch_servo_min_deg)
+        self.camera_pitch_servo_neutral_deg = clamp(
+            self.camera_pitch_servo_neutral_deg,
+            self.camera_pitch_servo_min_deg,
+            self.camera_pitch_servo_max_deg)
+        self.camera_pitch_servo_sim_rate_degps = max(0.0, float(
+            rospy.get_param("~camera_pitch_servo_sim_rate_degps", 60.0)))
+        self.camera_pitch_servo_sim_time_constant_sec = max(0.0, float(
+            rospy.get_param(
+                "~camera_pitch_servo_sim_time_constant_sec", 0.06)))
+        self.camera_pitch_servo_command_deg = (
+            self.camera_pitch_servo_neutral_deg)
+        self.camera_pitch_servo_angle_deg = (
+            self.camera_pitch_servo_neutral_deg)
+        self.camera_pitch_servo_last_update = rospy.Time.now()
         self.horizontal_limit_deg = float(rospy.get_param("~fov_horizontal_limit_deg", 26.6))
         self.vertical_limit_deg = float(rospy.get_param("~fov_vertical_limit_deg", 20.6))
         self.detection_range_m = float(rospy.get_param("~detection_range_m", 30.0))
@@ -312,7 +345,9 @@ class FixedCameraMultisimExperiment:
             "radar_measurement_error_m", "radar_delay_s",
             "radar_dropped_count", "visual_bias_u_px", "visual_bias_v_px",
             "visual_delay_s", "visual_dropped_count",
-            "guidance_delay_s", "guidance_dropped_count"
+            "guidance_delay_s", "guidance_dropped_count",
+            "camera_pitch_servo_command_deg",
+            "camera_pitch_servo_angle_deg"
         ])
 
         self.interceptor_cmd_pub = rospy.Publisher(
@@ -345,6 +380,11 @@ class FixedCameraMultisimExperiment:
             "/fixed_camera_sim/visual_bias", Vector3Stamped, queue_size=10)
         self.delay_state_pub = rospy.Publisher(
             "/fixed_camera_sim/delay_state", Vector3Stamped, queue_size=10)
+        self.camera_pitch_servo_feedback_pub = None
+        if self.enable_camera_pitch_servo:
+            self.camera_pitch_servo_feedback_pub = rospy.Publisher(
+                self.camera_pitch_servo_feedback_topic,
+                Float64, queue_size=10)
 
         rospy.Subscriber("/gazebo/model_states", ModelStates, self.model_states_cb, queue_size=1)
         rospy.Subscriber(self.interceptor_ns + "/state", State, self.interceptor_state_cb, queue_size=5)
@@ -371,6 +411,10 @@ class FixedCameraMultisimExperiment:
                          self.handover_pose_cb, queue_size=5)
         rospy.Subscriber("/radar_approach/estimated_target_velocity", TwistStamped,
                          self.estimated_target_velocity_cb, queue_size=5)
+        if self.enable_camera_pitch_servo:
+            rospy.Subscriber(
+                self.camera_pitch_servo_command_topic, Float64,
+                self.camera_pitch_servo_command_cb, queue_size=5)
 
         self.interceptor_arm = rospy.ServiceProxy(self.interceptor_ns + "/cmd/arming", CommandBool)
         self.target_arm = rospy.ServiceProxy(self.target_ns + "/cmd/arming", CommandBool)
@@ -397,6 +441,17 @@ class FixedCameraMultisimExperiment:
             self.visual_delay_mean, self.visual_delay_jitter,
             self.guidance_delay_mean, self.guidance_delay_jitter,
             self.results_dir)
+        if self.enable_camera_pitch_servo:
+            rospy.loginfo(
+                "[FixedCameraSim] Single-axis camera pitch servo: command=%s, "
+                "feedback=%s, limits=[%.1f, %.1f] deg, rate=%.1f deg/s, "
+                "time constant=%.3f s.",
+                self.camera_pitch_servo_command_topic,
+                self.camera_pitch_servo_feedback_topic,
+                self.camera_pitch_servo_min_deg,
+                self.camera_pitch_servo_max_deg,
+                self.camera_pitch_servo_sim_rate_degps,
+                self.camera_pitch_servo_sim_time_constant_sec)
 
     def model_states_cb(self, message):
         with self.lock:
@@ -436,6 +491,45 @@ class FixedCameraMultisimExperiment:
             self.guidance_queue,
             (due_time, self.guidance_queue_sequence, now.to_sec(),
              copy.deepcopy(message)))
+
+    def camera_pitch_servo_command_cb(self, message):
+        if not math.isfinite(message.data):
+            return
+        self.camera_pitch_servo_command_deg = clamp(
+            float(message.data),
+            self.camera_pitch_servo_min_deg,
+            self.camera_pitch_servo_max_deg)
+
+    def update_camera_pitch_servo(self, now):
+        if not self.enable_camera_pitch_servo:
+            self.camera_pitch_servo_angle_deg = 0.0
+            return
+        dt = (now - self.camera_pitch_servo_last_update).to_sec()
+        self.camera_pitch_servo_last_update = now
+        if dt <= 0.0 or dt > 0.5:
+            dt = 1.0 / max(self.control_rate, 1.0)
+
+        error = (self.camera_pitch_servo_command_deg -
+                 self.camera_pitch_servo_angle_deg)
+        if self.camera_pitch_servo_sim_time_constant_sec > 1.0e-6:
+            requested_rate = (
+                error / self.camera_pitch_servo_sim_time_constant_sec)
+        elif abs(error) > 1.0e-9:
+            requested_rate = math.copysign(
+                self.camera_pitch_servo_sim_rate_degps, error)
+        else:
+            requested_rate = 0.0
+        rate = clamp(
+            requested_rate,
+            -self.camera_pitch_servo_sim_rate_degps,
+            self.camera_pitch_servo_sim_rate_degps)
+        step = clamp(rate * dt, -abs(error), abs(error))
+        self.camera_pitch_servo_angle_deg = clamp(
+            self.camera_pitch_servo_angle_deg + step,
+            self.camera_pitch_servo_min_deg,
+            self.camera_pitch_servo_max_deg)
+        self.camera_pitch_servo_feedback_pub.publish(
+            Float64(data=self.camera_pitch_servo_angle_deg))
 
     def nominal_pn_command_cb(self, message):
         self.nominal_pn_command = message
@@ -754,7 +848,8 @@ class FixedCameraMultisimExperiment:
 
         body = world_to_body(
             interceptor_pose.orientation, camera_delta_world / camera_range)
-        angle = math.radians(self.mount_upward_angle_deg)
+        angle = math.radians(
+            self.mount_upward_angle_deg + self.camera_pitch_servo_angle_deg)
         nominal_x = math.cos(angle) * body[0] + math.sin(angle) * body[2]
         nominal_y = body[1]
         nominal_z = -math.sin(angle) * body[0] + math.cos(angle) * body[2]
@@ -887,8 +982,11 @@ class FixedCameraMultisimExperiment:
             cv2.circle(image, (pixel_x, pixel_y), 13, (0, 0, 220), 3)
             cv2.putText(image, "TARGET", (pixel_x + 18, pixel_y - 8),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 170), 2, cv2.LINE_AA)
-        cv2.putText(image, "Fixed camera: +%.1f deg | safe FOV: +/-%.1f x +/-%.1f deg" %
-                    (self.mount_upward_angle_deg, self.horizontal_limit_deg,
+        camera_upward_deg = (
+            self.mount_upward_angle_deg + self.camera_pitch_servo_angle_deg)
+        cv2.putText(image, "Camera up: %.1f deg (servo %+.1f) | safe FOV: +/-%.1f x +/-%.1f deg" %
+                    (camera_upward_deg, self.camera_pitch_servo_angle_deg,
+                     self.horizontal_limit_deg,
                      self.vertical_limit_deg),
                     (22, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (20, 20, 20), 2, cv2.LINE_AA)
         cv2.putText(image, "Phase: %s   Range: %.1f m   Tracking: %s" %
@@ -978,6 +1076,7 @@ class FixedCameraMultisimExperiment:
         now = rospy.Time.now()
         self.update_disturbance(now)
         self.update_guidance_delivery(now)
+        self.update_camera_pitch_servo(now)
         interceptor_command = self.make_command()
         target_command = self.make_command()
 
@@ -1094,13 +1193,15 @@ class FixedCameraMultisimExperiment:
                   "pixel=(%.1f, %.1f) | fov_ratio=(%.2f, %.2f) | "
                   "guidance=%s | handover=%s | radar_samples=%d | disturbance=%s | "
                   "delay_r/v/c=(%.3f/%.3f/%.3f)s | "
-                  "interceptor=%s/%s | target=%s/%s" %
+                  "servo=%.1f/%.1f deg | interceptor=%s/%s | target=%s/%s" %
                   (self.phase, self.distance, self.horizontal_distance, self.tracking,
                    self.pixel_u, self.pixel_v, self.horizontal_ratio, self.vertical_ratio,
                    self.radar_state, self.handover_complete, self.radar_sample_count,
                    self.disturbance_model,
                    self.radar_last_delay, self.visual_last_delay,
                    self.guidance_last_delay,
+                    self.camera_pitch_servo_angle_deg,
+                    self.camera_pitch_servo_command_deg,
                    self.interceptor_state.mode, self.interceptor_state.armed,
                    self.target_state.mode, self.target_state.armed))
         self.status_pub.publish(String(data=status))
@@ -1168,6 +1269,8 @@ class FixedCameraMultisimExperiment:
             self.visual_dropped_count,
             "%.6f" % self.guidance_last_delay,
             self.guidance_dropped_count,
+            "%.6f" % self.camera_pitch_servo_command_deg,
+            "%.6f" % self.camera_pitch_servo_angle_deg,
         ])
         if self.frame_count % 20 == 0:
             self.csv_file.flush()

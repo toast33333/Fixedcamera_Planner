@@ -1,6 +1,7 @@
 <launch>
   <arg name="results_dir" default="/tmp/radar_approach_multisim" />
   <arg name="core_tuning_config" default="$(find png_planner)/config/core_tuning.yaml" />
+  <arg name="enable_camera_pitch_servo" default="false" />
   <arg name="sitl_xy_velocity_limit_mps" default="20.0" />
   <arg name="target_speed_mps" default="2.0" />
   <arg name="target_heading_deg" default="0.0" />
@@ -233,6 +234,8 @@
     <param name="yaw_enable_speed_ratio" value="$(arg yaw_enable_speed_ratio)" />
     <param name="fov_horizontal_limit_deg" value="$(arg controller_fov_horizontal_limit_deg)" />
     <param name="fov_vertical_limit_deg" value="$(arg controller_fov_vertical_limit_deg)" />
+    <param name="enable_camera_pitch_servo" value="$(arg enable_camera_pitch_servo)" />
+    <param name="camera_pitch_servo_use_feedback" value="true" />
   </node>
 
   <!-- This node owns the complete radar-to-visual guidance output.  The
@@ -328,6 +331,7 @@
     <param name="fov_horizontal_limit_deg" value="26.6" />
     <param name="fov_vertical_limit_deg" value="20.6" />
     <param name="gate_detection_until_chase" value="$(arg gate_detection_until_chase)" />
+    <param name="enable_camera_pitch_servo" value="$(arg enable_camera_pitch_servo)" />
     <param name="stop_on_handover" value="$(arg stop_on_handover)" />
     <param name="radar_period_sec" value="$(arg radar_period_sec)" />
     <param name="radar_period_jitter_std_sec" value="$(arg radar_period_jitter_std_sec)" />

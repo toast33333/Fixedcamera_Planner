@@ -51,6 +51,7 @@
   <arg name="gate_detection_until_chase" default="true" />
   <arg name="enable_horizontal_control" default="true" />
   <arg name="enable_height_control" default="true" />
+  <arg name="enable_camera_pitch_servo" default="false" />
 
   <group ns="interceptor">
     <include file="$(find mavros)/launch/px4.launch">
@@ -83,6 +84,8 @@
     <param name="forward_speed_accel_limit_mps2" value="$(arg forward_speed_accel_limit_mps2)" />
     <param name="enable_horizontal_control" value="$(arg enable_horizontal_control)" />
     <param name="enable_height_control" value="$(arg enable_height_control)" />
+    <param name="enable_camera_pitch_servo" value="$(arg enable_camera_pitch_servo)" />
+    <param name="camera_pitch_servo_use_feedback" value="true" />
     <param name="fov_guard_center_area_ratio" value="$(arg fov_guard_center_area_ratio)" />
     <param name="fov_guard_yaw_gain_radps" value="$(arg fov_guard_yaw_gain_radps)" />
     <param name="fov_guard_vertical_gain_mps" value="$(arg fov_guard_vertical_gain_mps)" />
@@ -138,5 +141,6 @@
     <param name="visual_delay_mean_sec" value="$(arg visual_delay_mean_sec)" />
     <param name="visual_delay_jitter_std_sec" value="$(arg visual_delay_jitter_std_sec)" />
     <param name="visual_dropout_probability" value="$(arg visual_dropout_probability)" />
+    <param name="enable_camera_pitch_servo" value="$(arg enable_camera_pitch_servo)" />
   </node>
 </launch>

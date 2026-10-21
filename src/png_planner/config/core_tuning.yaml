@@ -2,7 +2,7 @@
 #
 # This file is intentionally flat.  It is loaded into both private node
 # namespaces after their complete base configuration.  Each node ignores keys
-# that it does not use, so the five tuning groups can live in one file.
+# that it does not use, so the six tuning groups can live in one file.
 # Units are written in parameter names wherever practical.
 
 # ============================================================================
@@ -121,3 +121,29 @@ camera_mount_upward_angle_deg: 20.0
 camera_offset_body_x_m: 0.0
 camera_offset_body_y_m: 0.0
 camera_offset_body_z_m: 0.0
+
+# ============================================================================
+# 6. Optional single-axis camera pitch servo
+#    Disabled by default until a field PWM/serial adapter is connected. The
+#    controller and simulator share the same relative-angle convention:
+#    positive degrees raise the optical axis, negative degrees lower it.
+# ============================================================================
+enable_camera_pitch_servo: false
+camera_pitch_servo_use_feedback: false
+camera_pitch_servo_neutral_deg: 0.0
+camera_pitch_servo_min_deg: -25.0
+camera_pitch_servo_max_deg: 25.0
+camera_pitch_servo_kp_per_sec: 3.0
+camera_pitch_servo_ki_per_sec2: 0.0
+camera_pitch_servo_kd: 0.05
+camera_pitch_servo_integral_limit_deg_sec: 10.0
+camera_pitch_servo_derivative_alpha: 0.2
+camera_pitch_servo_integral_decay: 0.98
+camera_pitch_servo_deadband_deg: 0.4
+camera_pitch_servo_max_rate_degps: 60.0
+camera_pitch_servo_return_on_loss: true
+camera_pitch_servo_return_rate_degps: 20.0
+
+# Simulation-only actuator dynamics. The real hardware adapter ignores these.
+camera_pitch_servo_sim_rate_degps: 60.0
+camera_pitch_servo_sim_time_constant_sec: 0.06

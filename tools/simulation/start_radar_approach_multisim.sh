@@ -94,6 +94,7 @@ RUN_WALL_TIMEOUT_S=${RUN_WALL_TIMEOUT_S:-120}
 SITL_XY_VELOCITY_LIMIT_MPS=${SITL_XY_VELOCITY_LIMIT_MPS:-20.0}
 EXPECTED_RESULT=${EXPECTED_RESULT:-unspecified}
 SHOW_GUI=${SHOW_GUI:-0}
+ENABLE_CAMERA_PITCH_SERVO=${ENABLE_CAMERA_PITCH_SERVO:-false}
 SHOW_RQT=${SHOW_RQT:-$SHOW_GUI}
 DEMO_GUI=${DEMO_GUI:-0}
 DEMO_VISUAL_MARKERS=${DEMO_VISUAL_MARKERS:-0}
@@ -251,7 +252,7 @@ export MULTISIM_LAUNCH_FILE
 export VISUAL_FORWARD_SPEED_MPS
 export FORWARD_SPEED_ACCEL_LIMIT_MPS2
 export GATE_DETECTION_UNTIL_CHASE
-export ENABLE_HORIZONTAL_CONTROL ENABLE_HEIGHT_CONTROL
+export ENABLE_HORIZONTAL_CONTROL ENABLE_HEIGHT_CONTROL ENABLE_CAMERA_PITCH_SERVO
 export START_IBVS STOP_ON_HANDOVER
 export DISTURBANCE_MODEL DISTURBANCE_SEED DISTURBANCE_TIME_CONSTANT_S
 export DISTURBANCE_CLIP_SIGMA INTERCEPTOR_DISTURBANCE_STD_XY_MPS
@@ -338,6 +339,7 @@ keys = [
     "FORWARD_SPEED_ACCEL_LIMIT_MPS2",
     "GATE_DETECTION_UNTIL_CHASE",
     "ENABLE_HORIZONTAL_CONTROL", "ENABLE_HEIGHT_CONTROL",
+    "ENABLE_CAMERA_PITCH_SERVO",
     "START_IBVS", "STOP_ON_HANDOVER",
     "DISTURBANCE_MODEL", "DISTURBANCE_SEED", "DISTURBANCE_TIME_CONSTANT_S",
     "DISTURBANCE_CLIP_SIGMA", "INTERCEPTOR_DISTURBANCE_STD_XY_MPS",
@@ -600,6 +602,9 @@ rosbag record -O "$run_dir/experiment.bag" \
   /fixed_camera_ibvs/fov_state \
   /fixed_camera_ibvs/nominal_pn_cmd \
   /fixed_camera_ibvs/fov_correction \
+  /fixed_camera_ibvs/camera_pitch_servo_state \
+  /camera_pitch_servo/command_deg \
+  /camera_pitch_servo/feedback_deg \
   /fixed_camera_sim/interceptor_velocity_disturbance \
   /fixed_camera_sim/target_velocity_disturbance \
   /fixed_camera_sim/visual_disturbance \
@@ -719,6 +724,7 @@ timeout --signal=TERM --kill-after=10s "${RUN_WALL_TIMEOUT_S}s" \
     gate_detection_until_chase:="$GATE_DETECTION_UNTIL_CHASE" \
     enable_horizontal_control:="$ENABLE_HORIZONTAL_CONTROL" \
     enable_height_control:="$ENABLE_HEIGHT_CONTROL" \
+    enable_camera_pitch_servo:="$ENABLE_CAMERA_PITCH_SERVO" \
     start_ibvs:="$START_IBVS" \
     stop_on_handover:="$STOP_ON_HANDOVER" \
     disturbance_model:="$DISTURBANCE_MODEL" \
