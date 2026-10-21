@@ -154,13 +154,6 @@ def validate_export(workspace: Path) -> list[Path]:
         / "src"
         / "png_planner"
         / "src"
-        / "atlink_ros_node.cpp",
-        workspace
-        / "src"
-        / "Fixedcamera_Planner"
-        / "src"
-        / "png_planner"
-        / "src"
         / "camera_pitch_servo_open_loop.cpp",
     )
     missing = [path for path in required if not path.is_file()]

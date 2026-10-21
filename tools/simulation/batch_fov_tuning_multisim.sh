@@ -3,7 +3,14 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CASES_FILE=${1:-"$SCRIPT_DIR/fov_tuning_coarse_cases.csv"}
-RUN_ROOT=/home/toast/fixedcamera_radar_multisim_results
+REPO_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
+if [[ -f "$REPO_DIR/devel/setup.bash" ]]; then
+  DEFAULT_WS_DIR=$REPO_DIR
+else
+  DEFAULT_WS_DIR=$(cd "$REPO_DIR/../.." && pwd)
+fi
+WS_DIR=${WS_DIR:-$DEFAULT_WS_DIR}
+RUN_ROOT=${RUN_ROOT:-$WS_DIR/../fixedcamera_radar_multisim_results}
 BATCH_ID=${BATCH_ID:-$(date +%Y%m%d_%H%M%S)_fov_tuning}
 export BATCH_ID
 

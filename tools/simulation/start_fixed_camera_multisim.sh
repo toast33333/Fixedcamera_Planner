@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROS_SETUP=/opt/ros/noetic/setup.bash
-PX4_DIR=/home/toast/PX4-Autopilot
-WS_DIR=/home/toast/fixedcamera_multisim_ws
-RUN_ROOT=/home/toast/fixedcamera_multisim_results
-DISPLAY_VALUE=:1
-XAUTHORITY_FILE=/run/user/1000/gdm/Xauthority
+REPO_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
+if [[ -f "$REPO_DIR/devel/setup.bash" ]]; then
+  DEFAULT_WS_DIR=$REPO_DIR
+else
+  DEFAULT_WS_DIR=$(cd "$REPO_DIR/../.." && pwd)
+fi
+PX4_DIR=${PX4_DIR:-/home/toast/PX4-Autopilot}
+WS_DIR=${WS_DIR:-$DEFAULT_WS_DIR}
+RUN_ROOT=${RUN_ROOT:-$WS_DIR/../fixedcamera_multisim_results}
+DISPLAY_VALUE=${DISPLAY_VALUE:-${DISPLAY:-:1}}
+XAUTHORITY_FILE=${XAUTHORITY_FILE:-${XAUTHORITY:-/run/user/$(id -u)/gdm/Xauthority}}
 
 source "$ROS_SETUP"
-source /home/toast/png_planner_ws/devel/setup.bash
 source "$WS_DIR/devel/setup.bash"
 
 if pgrep -x px4 >/dev/null || pgrep -x gzserver >/dev/null; then

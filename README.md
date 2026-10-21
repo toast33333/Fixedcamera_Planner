@@ -15,8 +15,8 @@ python3 tools/deployment/export_airborne_workspace.py \
 
 The exported workspace contains the timestamped detector, one validated RKNN
 model, the fixed-camera controller, radar approach/handover controller,
-circle test, S001M open-loop PWM mapper, AT-Link v3 node, their active
-configuration and the field start modes. See
+S001M open-loop PWM mapper, their active configuration and the field start
+modes. See
 `docs/代码结构与机载部署.md` and `deploy/airborne/README.md` for the exact
 boundary and installation procedure. The generated workspace is also published
 as the simulation-free `airborne` branch for direct shallow cloning on the
@@ -110,36 +110,15 @@ approach/handover, FOV retention, and camera installation geometry) are collecte
 `src/png_planner/config/core_tuning.yaml`.  Production launches load this file
 after the complete base configurations, so its duplicate keys take priority.
 
-## Circle/spiral trajectory test
-
-`circle_trajectory_test` is an independent aircraft-turning test. It moves from
-the current hover point to an outer-radius start point, follows an inward
-Archimedean spiral at each configured speed, returns to the hover point, and
-then advances to the next speed. It publishes desired and actual paths and
-writes one CSV summary row per speed trial.
-
-Run the PX4/Gazebo one-click simulation with:
-
-```bash
-./tools/simulation/start_circle_trajectory_multisim.sh
-```
-
-This node is a MAVROS velocity-command owner and must not run at the same time
-as the fixed-camera or radar-approach controllers. Parameters, standalone
-launch instructions and the short smoke-test command are documented in
-`docs/CIRCLE_TRAJECTORY_TEST.md`.
-
-## AT-Link and camera-pitch servo staging
-
-`atlink_ros_node` vendors the supplied AT-Link v3 C source and connects its
-independent serial device to MAVROS arming/takeoff services and telemetry. The
-RK3576 deployment defaults to flight controller USB `/dev/ttyACM0` and AT-Link
-`/dev/ttyUSB0`; the AT-Link node waits and reconnects if its adapter is absent.
+## Camera-pitch servo staging
 
 `camera_pitch_servo_open_loop` is the hardware-independent part of the S001M
 integration. It converts `/camera_pitch_servo/command_deg` into a bounded,
 rate-limited `/camera_pitch_servo/pulse_width_us`. It deliberately does not
 access an RK3576 PWM pin until the carrier pin and `pwmchip/channel` are known.
+
+This simulation branch intentionally excludes the independent circle-flight
+test and AT-Link integration.
 
 基于 ROS1 catkin 的视觉制导工作区，核心目标是根据图像检测框驱动无人机进行偏航跟踪、2D PNG 导引和 3D PNG 导引。
 

@@ -44,17 +44,3 @@ FORWARD_SPEED_MPS=11.5 ./tools/field/start_intercept_full.sh
 chrony、PTP 等方式同步系统时钟。
 
 仅在台架调试且明确知道风险时，才可设置 `SKIP_PREFLIGHT_CHECKS=1` 跳过飞控连接和视觉跟踪检查。
-
-圆圈/螺旋轨迹测试不依赖视觉，但要求飞机已经解锁、悬停并处于`GUIDED`，且没有
-其他速度控制节点运行：
-
-```bash
-./tools/field/start_circle_trajectory.sh
-```
-
-速度和半径可用环境变量覆盖，例如：
-
-```bash
-MINIMUM_SPEED=5 MAXIMUM_SPEED=9 SPEED_STEP=2 START_RADIUS=20 \
-  ./tools/field/start_circle_trajectory.sh
-```

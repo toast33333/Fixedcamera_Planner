@@ -190,25 +190,6 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-add_library(atlink_vendor STATIC
-  vendor/atlink/src/frame.c
-  vendor/atlink/src/crc16.c
-  vendor/atlink/src/payload.c
-  vendor/atlink/src/session.c
-  vendor/atlink/src/bridge.c
-  vendor/atlink/src/telem.c
-)
-target_include_directories(atlink_vendor PUBLIC
-  vendor/atlink/include
-  vendor/atlink/src
-)
-target_compile_definitions(atlink_vendor PRIVATE ATLINK_BUILD)
-set_target_properties(atlink_vendor PROPERTIES
-  C_STANDARD 11
-  C_STANDARD_REQUIRED ON
-  POSITION_INDEPENDENT_CODE ON
-)
-
 if(GIMBAL_CTRL_BY_PIXEL_INCLUDE_DIR)
   include_directories(${GIMBAL_CTRL_BY_PIXEL_INCLUDE_DIR})
 endif()
@@ -304,7 +285,6 @@ catkin_install_python(PROGRAMS
   scripts/gimbal_keyboard_rpy_test.py
   scripts/px4_multisim_experiment.py
   scripts/nav_measurement_proxy.py
-  scripts/circle_trajectory_sitl_manager.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
@@ -366,21 +346,11 @@ add_executable(target_sitl_sim src/target_sitl_sim.cpp)
 add_dependencies(target_sitl_sim ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(target_sitl_sim ${catkin_LIBRARIES} ${GEOGRAPHICLIB_LIBRARY})
 
-add_executable(circle_trajectory_test src/circle_trajectory_test.cpp)
-add_dependencies(circle_trajectory_test ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(circle_trajectory_test ${catkin_LIBRARIES})
-
 add_executable(camera_pitch_servo_open_loop
   src/camera_pitch_servo_open_loop.cpp)
 add_dependencies(camera_pitch_servo_open_loop
   ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(camera_pitch_servo_open_loop ${catkin_LIBRARIES})
-
-add_executable(atlink_ros_node src/atlink_ros_node.cpp)
-add_dependencies(atlink_ros_node
-  ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_include_directories(atlink_ros_node PRIVATE vendor/atlink/include)
-target_link_libraries(atlink_ros_node atlink_vendor ${catkin_LIBRARIES})
 
 add_executable(fixed_camera_ibvs src/fixed_camera_ibvs.cpp)
 add_dependencies(fixed_camera_ibvs ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
@@ -390,7 +360,7 @@ add_executable(radar_approach_handover src/radar_approach_handover.cpp)
 add_dependencies(radar_approach_handover ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(radar_approach_handover ${catkin_LIBRARIES} ${GEOGRAPHICLIB_LIBRARY})
 
-install(TARGETS circle_trajectory_test camera_pitch_servo_open_loop atlink_ros_node
+install(TARGETS camera_pitch_servo_open_loop
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

@@ -19,9 +19,7 @@ rosmsg show detection_msgs/Detection | grep -q '^std_msgs/Header header'
 rospack find png_planner >/dev/null
 test -x "$WS_DIR/devel/lib/png_planner/fixed_camera_ibvs"
 test -x "$WS_DIR/devel/lib/png_planner/radar_approach_handover"
-test -x "$WS_DIR/devel/lib/png_planner/circle_trajectory_test"
 test -x "$WS_DIR/devel/lib/png_planner/camera_pitch_servo_open_loop"
-test -x "$WS_DIR/devel/lib/png_planner/atlink_ros_node"
 
 echo "机载工作区静态检查通过。"
 echo "RKNN 模型: $MODEL_PATH"

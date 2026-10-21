@@ -31,7 +31,6 @@ src/Fixedcamera_Planner/
 - Python 3；
 - MAVROS 通过 `apm.launch` 连接 Pixhawk6C/ArduCopter 4.6.3；
 - 飞控当前通过USB串口 `/dev/ttyACM0:115200` 连接；
-- AT-Link默认通过独立的 `/dev/ttyUSB0:115200` 连接；
 - RK3576 对应版本的 RKNN Lite2 Python wheel 和运行库；
 - OpenCV、NumPy、GeographicLib。
 
@@ -95,8 +94,8 @@ cd ~/fixed_camera_airborne_ws/src/Fixedcamera_Planner
 这些脚本不会自动解锁、起飞或切换飞行模式。飞手确认空域、画面和遥控接管均正常
 后，手动把测试机切入 `GUIDED`。
 
-容器开机只自动启动ROS Master、MAVROS、视觉识别和AT-Link节点，不会自动启动
-固定相机控制器、雷达抵近控制器或圆圈测试。
+容器开机只自动启动ROS Master、MAVROS和视觉识别，不会自动启动固定相机控制器
+或雷达抵近控制器。
 
 ## 6. 雷达抵近后交接视觉控制
 
@@ -116,14 +115,3 @@ roslaunch png_planner radar_approach_intercept.launch
 4. `/object_detections` 的时间戳递增且 `frame_id` 正确；
 5. MAVROS 使用 `LOCAL_NED`，ArduCopter 的 `GUIDED` 速度接口和失控保护已经台架验证；
 6. 首飞使用限速、系留或足够大的隔离空域，并保留人工切回姿态/定点模式的能力。
-
-## 8. 圆圈/螺旋轨迹测试
-
-圆圈测试已包含在机载镜像中，但不会开机自动启动。飞机应已解锁、稳定悬停并处于
-`GUIDED`，同时确认没有其他节点发布速度指令，然后运行：
-
-```bash
-roslaunch png_planner circle_trajectory_test.launch \
-  minimum_speed:=5.0 maximum_speed:=15.0 speed_step:=2.0 \
-  start_radius:=20.0 radial_rate:=0.5
-```

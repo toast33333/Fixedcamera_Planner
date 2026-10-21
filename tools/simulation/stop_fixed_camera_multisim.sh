@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-RUN_ROOT=/home/toast/fixedcamera_multisim_results
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_DIR=$(cd "$SCRIPT_DIR/../.." && pwd)
+if [[ -f "$REPO_DIR/devel/setup.bash" ]]; then
+  DEFAULT_WS_DIR=$REPO_DIR
+else
+  DEFAULT_WS_DIR=$(cd "$REPO_DIR/../.." && pwd)
+fi
+WS_DIR=${WS_DIR:-$DEFAULT_WS_DIR}
+RUN_ROOT=${RUN_ROOT:-$WS_DIR/../fixedcamera_multisim_results}
 pid_file="$RUN_ROOT/active.pid"
 
 if [[ ! -f "$pid_file" ]]; then
