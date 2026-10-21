@@ -284,6 +284,7 @@ catkin_install_python(PROGRAMS
   scripts/gimbal_keyboard_rpy_test.py
   scripts/px4_multisim_experiment.py
   scripts/nav_measurement_proxy.py
+  scripts/circle_trajectory_sitl_manager.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
@@ -344,6 +345,10 @@ target_link_libraries(rpy_png_no_alt ${catkin_LIBRARIES})
 add_executable(target_sitl_sim src/target_sitl_sim.cpp)
 add_dependencies(target_sitl_sim ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(target_sitl_sim ${catkin_LIBRARIES} ${GEOGRAPHICLIB_LIBRARY})
+
+add_executable(circle_trajectory_test src/circle_trajectory_test.cpp)
+add_dependencies(circle_trajectory_test ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(circle_trajectory_test ${catkin_LIBRARIES})
 
 add_executable(fixed_camera_ibvs src/fixed_camera_ibvs.cpp)
 add_dependencies(fixed_camera_ibvs ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})

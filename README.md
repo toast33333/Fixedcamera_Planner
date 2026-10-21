@@ -109,6 +109,25 @@ approach/handover, FOV retention, and camera installation geometry) are collecte
 `src/png_planner/config/core_tuning.yaml`.  Production launches load this file
 after the complete base configurations, so its duplicate keys take priority.
 
+## Circle/spiral trajectory test
+
+`circle_trajectory_test` is an independent aircraft-turning test. It moves from
+the current hover point to an outer-radius start point, follows an inward
+Archimedean spiral at each configured speed, returns to the hover point, and
+then advances to the next speed. It publishes desired and actual paths and
+writes one CSV summary row per speed trial.
+
+Run the PX4/Gazebo one-click simulation with:
+
+```bash
+./tools/simulation/start_circle_trajectory_multisim.sh
+```
+
+This node is a MAVROS velocity-command owner and must not run at the same time
+as the fixed-camera or radar-approach controllers. Parameters, standalone
+launch instructions and the short smoke-test command are documented in
+`docs/CIRCLE_TRAJECTORY_TEST.md`.
+
 基于 ROS1 catkin 的视觉制导工作区，核心目标是根据图像检测框驱动无人机进行偏航跟踪、2D PNG 导引和 3D PNG 导引。
 
 当前工作区主要包含 3 个包：
