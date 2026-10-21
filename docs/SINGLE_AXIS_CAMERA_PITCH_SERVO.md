@@ -24,6 +24,17 @@
 
 后续硬件适配节点只需要订阅该话题，再换算成 PWM、串口数据或飞控舵机命令。硬件适配层负责处理舵机自身的零偏、PWM 中值、方向反相和脉宽限制，不应改变上述 ROS 侧的正负号定义。
 
+当前已提供不依赖硬件引脚的开环换算节点：
+
+```bash
+roslaunch png_planner camera_pitch_servo_open_loop.launch
+```
+
+它把角度指令限速后换算为 `/camera_pitch_servo/pulse_width_us`
+（`std_msgs/UInt16`）。按S001M规格书默认使用50 Hz、500/1500/2500 us和
+180度行程。该节点尚不访问RK3576的PWM寄存器或`pwmchip`；硬件接入后再补最后
+一层“脉宽话题到指定硬件PWM通道”的驱动。
+
 ### 角度反馈（可选）
 
 - 话题：`/camera_pitch_servo/feedback_deg`
@@ -83,6 +94,10 @@ camera_mount_pitch = fixed_mount_pitch - theta_servo
 - `camera_pitch_servo_max_rate_degps`：控制器允许的最大转速。
 - `camera_pitch_servo_return_on_loss`：丢失目标后是否回中。
 - `camera_pitch_servo_return_rate_degps`：回中速度。
+- `camera_pitch_servo_pwm_min_us/neutral_us/max_us`：S001M脉宽标定值。
+- `camera_pitch_servo_pwm_reverse`：舵机机械安装方向反相。
+- `camera_pitch_servo_driver_max_rate_degps`：开环PWM层的二次安全限速。
+- `camera_pitch_servo_command_timeout_sec`：角度指令超时回中时间。
 
 首次接实物时，先将角度范围临时限制为 `-5°~+5°`，飞机不上桨并固定机身，用手上下移动目标确认：目标向画面上方移动时，指令应为正并使相机上抬。符号确认后再逐步放宽机械范围。
 

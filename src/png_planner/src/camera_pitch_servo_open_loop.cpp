@@ -1,0 +1,198 @@
+#include <geometry_msgs/Vector3Stamped.h>
+#include <ros/ros.h>
+#include <std_msgs/Float64.h>
+#include <std_msgs/UInt16.h>
+
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <stdexcept>
+#include <string>
+
+namespace {
+
+double clampValue(double value, double lower, double upper) {
+  return std::max(lower, std::min(upper, value));
+}
+
+}  // namespace
+
+class CameraPitchServoOpenLoop {
+ public:
+  CameraPitchServoOpenLoop() : nh_(), pnh_("~") {
+    pnh_.param<std::string>("camera_pitch_servo_command_topic", command_topic_,
+                            "/camera_pitch_servo/command_deg");
+    pnh_.param<std::string>("camera_pitch_servo_pwm_topic", pwm_topic_,
+                            "/camera_pitch_servo/pulse_width_us");
+    pnh_.param<std::string>("camera_pitch_servo_estimated_topic", estimated_topic_,
+                            "/camera_pitch_servo/estimated_deg");
+    pnh_.param<std::string>("camera_pitch_servo_open_loop_state_topic", state_topic_,
+                            "/camera_pitch_servo/open_loop_state");
+    pnh_.param("camera_pitch_servo_neutral_deg", neutral_deg_, 0.0);
+    pnh_.param("camera_pitch_servo_min_deg", command_min_deg_, -25.0);
+    pnh_.param("camera_pitch_servo_max_deg", command_max_deg_, 25.0);
+    pnh_.param("camera_pitch_servo_physical_half_travel_deg",
+                physical_half_travel_deg_, 90.0);
+    pnh_.param("camera_pitch_servo_pwm_min_us", pwm_min_us_, 500);
+    pnh_.param("camera_pitch_servo_pwm_neutral_us", pwm_neutral_us_, 1500);
+    pnh_.param("camera_pitch_servo_pwm_max_us", pwm_max_us_, 2500);
+    pnh_.param("camera_pitch_servo_pwm_period_us", pwm_period_us_, 20000);
+    pnh_.param("camera_pitch_servo_pwm_reverse", pwm_reverse_, false);
+    pnh_.param("camera_pitch_servo_driver_rate_hz", update_rate_hz_, 50.0);
+    pnh_.param("camera_pitch_servo_driver_max_rate_degps", max_rate_degps_, 60.0);
+    pnh_.param("camera_pitch_servo_command_timeout_sec", command_timeout_sec_, 0.5);
+    pnh_.param("camera_pitch_servo_return_on_command_timeout",
+                return_on_timeout_, true);
+
+    validateParameters();
+    target_deg_ = neutral_deg_;
+    estimated_deg_ = neutral_deg_;
+    last_update_ = ros::Time::now();
+
+    command_sub_ = nh_.subscribe(command_topic_, 5,
+                                 &CameraPitchServoOpenLoop::commandCallback, this);
+    pwm_pub_ = nh_.advertise<std_msgs::UInt16>(pwm_topic_, 1, true);
+    estimated_pub_ = nh_.advertise<std_msgs::Float64>(estimated_topic_, 1, true);
+    state_pub_ = nh_.advertise<geometry_msgs::Vector3Stamped>(state_topic_, 1);
+    timer_ = nh_.createTimer(ros::Duration(1.0 / update_rate_hz_),
+                             &CameraPitchServoOpenLoop::update, this);
+
+    publishState(ros::Time::now());
+    ROS_INFO("Camera pitch open-loop mapper: command=%s pwm=%s, limits=[%.1f, %.1f] deg, "
+             "pulse=[%d, %d, %d] us period=%d us reverse=%s",
+             command_topic_.c_str(), pwm_topic_.c_str(), command_min_deg_,
+             command_max_deg_, pwm_min_us_, pwm_neutral_us_, pwm_max_us_,
+             pwm_period_us_, pwm_reverse_ ? "true" : "false");
+  }
+
+ private:
+  void validateParameters() {
+    if (!std::isfinite(neutral_deg_) || !std::isfinite(command_min_deg_) ||
+        !std::isfinite(command_max_deg_) || command_min_deg_ >= command_max_deg_ ||
+        neutral_deg_ < command_min_deg_ || neutral_deg_ > command_max_deg_) {
+      throw std::runtime_error("invalid camera pitch command angle limits");
+    }
+    if (!std::isfinite(physical_half_travel_deg_) ||
+        physical_half_travel_deg_ <= 0.0) {
+      throw std::runtime_error("camera_pitch_servo_physical_half_travel_deg must be positive");
+    }
+    if (pwm_min_us_ <= 0 || pwm_min_us_ >= pwm_neutral_us_ ||
+        pwm_neutral_us_ >= pwm_max_us_ || pwm_max_us_ >= pwm_period_us_) {
+      throw std::runtime_error("invalid camera pitch PWM range or period");
+    }
+    if (!std::isfinite(update_rate_hz_) || update_rate_hz_ <= 0.0 ||
+        !std::isfinite(max_rate_degps_) || max_rate_degps_ <= 0.0 ||
+        !std::isfinite(command_timeout_sec_) || command_timeout_sec_ < 0.0) {
+      throw std::runtime_error("invalid camera pitch mapper timing parameters");
+    }
+  }
+
+  void commandCallback(const std_msgs::Float64::ConstPtr& message) {
+    if (!std::isfinite(message->data)) {
+      ROS_WARN_THROTTLE(1.0, "Ignoring non-finite camera pitch command");
+      return;
+    }
+    target_deg_ = clampValue(message->data, command_min_deg_, command_max_deg_);
+    last_command_receipt_ = ros::Time::now();
+    have_command_ = true;
+  }
+
+  uint16_t angleToPulse(double command_deg) const {
+    double relative_deg = command_deg - neutral_deg_;
+    if (pwm_reverse_) relative_deg = -relative_deg;
+    relative_deg = clampValue(relative_deg, -physical_half_travel_deg_,
+                              physical_half_travel_deg_);
+
+    double pulse = pwm_neutral_us_;
+    if (relative_deg >= 0.0) {
+      pulse += relative_deg / physical_half_travel_deg_ *
+               static_cast<double>(pwm_max_us_ - pwm_neutral_us_);
+    } else {
+      pulse += relative_deg / physical_half_travel_deg_ *
+               static_cast<double>(pwm_neutral_us_ - pwm_min_us_);
+    }
+    pulse = clampValue(pulse, static_cast<double>(pwm_min_us_),
+                       static_cast<double>(pwm_max_us_));
+    return static_cast<uint16_t>(std::lround(pulse));
+  }
+
+  void update(const ros::TimerEvent&) {
+    const ros::Time now = ros::Time::now();
+    double dt = (now - last_update_).toSec();
+    last_update_ = now;
+    if (!std::isfinite(dt) || dt <= 0.0 || dt > 0.5) dt = 1.0 / update_rate_hz_;
+
+    if (return_on_timeout_ && have_command_ && command_timeout_sec_ > 0.0 &&
+        (now - last_command_receipt_).toSec() > command_timeout_sec_) {
+      target_deg_ = neutral_deg_;
+    }
+
+    const double maximum_step = max_rate_degps_ * dt;
+    const double remaining = target_deg_ - estimated_deg_;
+    estimated_deg_ += clampValue(remaining, -maximum_step, maximum_step);
+    estimated_deg_ = clampValue(estimated_deg_, command_min_deg_, command_max_deg_);
+    publishState(now);
+  }
+
+  void publishState(const ros::Time& stamp) {
+    const uint16_t pulse_us = angleToPulse(estimated_deg_);
+    std_msgs::UInt16 pulse;
+    pulse.data = pulse_us;
+    pwm_pub_.publish(pulse);
+
+    std_msgs::Float64 estimated;
+    estimated.data = estimated_deg_;
+    estimated_pub_.publish(estimated);
+
+    geometry_msgs::Vector3Stamped state;
+    state.header.stamp = stamp;
+    state.header.frame_id = "camera_pitch_servo_open_loop";
+    state.vector.x = target_deg_;
+    state.vector.y = estimated_deg_;
+    state.vector.z = pulse_us;
+    state_pub_.publish(state);
+  }
+
+  ros::NodeHandle nh_;
+  ros::NodeHandle pnh_;
+  ros::Subscriber command_sub_;
+  ros::Publisher pwm_pub_;
+  ros::Publisher estimated_pub_;
+  ros::Publisher state_pub_;
+  ros::Timer timer_;
+
+  std::string command_topic_;
+  std::string pwm_topic_;
+  std::string estimated_topic_;
+  std::string state_topic_;
+  double neutral_deg_{0.0};
+  double command_min_deg_{-25.0};
+  double command_max_deg_{25.0};
+  double physical_half_travel_deg_{90.0};
+  int pwm_min_us_{500};
+  int pwm_neutral_us_{1500};
+  int pwm_max_us_{2500};
+  int pwm_period_us_{20000};
+  bool pwm_reverse_{false};
+  double update_rate_hz_{50.0};
+  double max_rate_degps_{60.0};
+  double command_timeout_sec_{0.5};
+  bool return_on_timeout_{true};
+  bool have_command_{false};
+  double target_deg_{0.0};
+  double estimated_deg_{0.0};
+  ros::Time last_command_receipt_;
+  ros::Time last_update_;
+};
+
+int main(int argc, char** argv) {
+  ros::init(argc, argv, "camera_pitch_servo_open_loop");
+  try {
+    CameraPitchServoOpenLoop node;
+    ros::spin();
+  } catch (const std::exception& error) {
+    ROS_FATAL("Camera pitch open-loop mapper failed: %s", error.what());
+    return 1;
+  }
+  return 0;
+}

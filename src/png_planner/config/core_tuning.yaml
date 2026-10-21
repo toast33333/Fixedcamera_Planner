@@ -144,6 +144,19 @@ camera_pitch_servo_max_rate_degps: 60.0
 camera_pitch_servo_return_on_loss: true
 camera_pitch_servo_return_rate_degps: 20.0
 
+# S001M open-loop angle-to-PWM mapper. These values follow the supplied
+# DS-S001M-0.6P8.5-CL-P datasheet. No RK3576 pin is accessed by this layer.
+camera_pitch_servo_pwm_min_us: 500
+camera_pitch_servo_pwm_neutral_us: 1500
+camera_pitch_servo_pwm_max_us: 2500
+camera_pitch_servo_pwm_period_us: 20000
+camera_pitch_servo_physical_half_travel_deg: 90.0
+camera_pitch_servo_pwm_reverse: false
+camera_pitch_servo_driver_rate_hz: 50.0
+camera_pitch_servo_driver_max_rate_degps: 60.0
+camera_pitch_servo_command_timeout_sec: 0.5
+camera_pitch_servo_return_on_command_timeout: true
+
 # Simulation-only actuator dynamics. The real hardware adapter ignores these.
 camera_pitch_servo_sim_rate_degps: 60.0
 camera_pitch_servo_sim_time_constant_sec: 0.06

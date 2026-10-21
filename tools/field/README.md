@@ -34,8 +34,8 @@ FORWARD_SPEED_MPS=11.5 ./tools/field/start_intercept_full.sh
 - `ALLOW_ALREADY_GUIDED=0`：默认拒绝在已经处于 `GUIDED` 时启动，避免突然接管。
 - `WS_DIR=...`：ROS 工作空间根目录；默认按仓库所在位置自动推导。
 
-实机默认按 `Pixhawk6C + ArduCopter 4.6.3 + TELEM2` 使用。MAVROS 必须通过
-`apm.launch` 启动，TELEM2 当前映射为 `/dev/ttyS8:115200`，并保持
+实机默认按 `Pixhawk6C + ArduCopter 4.6.3 + USB` 使用。MAVROS 必须通过
+`apm.launch` 启动，飞控USB当前映射为 `/dev/ttyACM0:115200`，并保持
 `/mavros/setpoint_velocity/mav_frame=LOCAL_NED`。脚本会检查 ArduPilot 类型、
 坐标系、IMU、本地位姿、本地速度和视觉跟踪；GPS/EKF 尚未建立位置解时不会启动控制器。
 
@@ -44,3 +44,17 @@ FORWARD_SPEED_MPS=11.5 ./tools/field/start_intercept_full.sh
 chrony、PTP 等方式同步系统时钟。
 
 仅在台架调试且明确知道风险时，才可设置 `SKIP_PREFLIGHT_CHECKS=1` 跳过飞控连接和视觉跟踪检查。
+
+圆圈/螺旋轨迹测试不依赖视觉，但要求飞机已经解锁、悬停并处于`GUIDED`，且没有
+其他速度控制节点运行：
+
+```bash
+./tools/field/start_circle_trajectory.sh
+```
+
+速度和半径可用环境变量覆盖，例如：
+
+```bash
+MINIMUM_SPEED=5 MAXIMUM_SPEED=9 SPEED_STEP=2 START_RADIUS=20 \
+  ./tools/field/start_circle_trajectory.sh
+```

@@ -1,0 +1,38 @@
+<launch>
+  <arg name="serial_device" default="$(optenv ATLINK_DEVICE /dev/ttyUSB0)" />
+  <arg name="baud" default="115200" />
+  <arg name="serial_retry_sec" default="1.0" />
+  <arg name="local_address" default="1" />
+  <arg name="serial" default="" />
+  <arg name="takeoff_altitude" default="5.0" />
+  <arg name="takeoff_latitude" default="0.0" />
+  <arg name="takeoff_longitude" default="0.0" />
+  <arg name="arming_service" default="/mavros/cmd/arming" />
+  <arg name="takeoff_service" default="/mavros/cmd/takeoff" />
+  <arg name="state_topic" default="/mavros/state" />
+  <arg name="extended_state_topic" default="/mavros/extended_state" />
+  <arg name="gps_topic" default="/mavros/global_position/global" />
+  <arg name="relative_altitude_topic" default="/mavros/global_position/rel_alt" />
+  <arg name="battery_topic" default="/mavros/battery" />
+  <arg name="velocity_topic" default="/mavros/local_position/velocity_local" />
+
+  <node pkg="png_planner" type="atlink_ros_node" name="atlink_ros_node" output="screen">
+    <param name="serial_device" value="$(arg serial_device)" />
+    <param name="baud" value="$(arg baud)" />
+    <param name="serial_retry_sec" value="$(arg serial_retry_sec)" />
+    <param name="local_address" value="$(arg local_address)" />
+    <param name="serial" value="$(arg serial)" />
+    <param name="takeoff_altitude" value="$(arg takeoff_altitude)" />
+    <param name="takeoff_latitude" value="$(arg takeoff_latitude)" />
+    <param name="takeoff_longitude" value="$(arg takeoff_longitude)" />
+    <param name="arming_service" value="$(arg arming_service)" />
+    <param name="takeoff_service" value="$(arg takeoff_service)" />
+    <param name="mavros_state_topic" value="$(arg state_topic)" />
+    <param name="mavros_extended_state_topic" value="$(arg extended_state_topic)" />
+    <param name="gps_topic" value="$(arg gps_topic)" />
+    <param name="relative_altitude_topic" value="$(arg relative_altitude_topic)" />
+    <param name="battery_topic" value="$(arg battery_topic)" />
+    <param name="velocity_topic" value="$(arg velocity_topic)" />
+  </node>
+</launch>
+

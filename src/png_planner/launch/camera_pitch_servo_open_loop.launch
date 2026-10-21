@@ -1,0 +1,14 @@
+<launch>
+  <!-- This node only converts the existing angle command into a safe PWM
+       pulse-width topic. It does not access an RK3576 PWM pin yet. -->
+  <arg name="config" default="$(find png_planner)/config/core_tuning.yaml" />
+  <arg name="command_topic" default="/camera_pitch_servo/command_deg" />
+  <arg name="pwm_topic" default="/camera_pitch_servo/pulse_width_us" />
+
+  <node pkg="png_planner" type="camera_pitch_servo_open_loop"
+        name="camera_pitch_servo_open_loop" output="screen" required="true">
+    <rosparam command="load" file="$(arg config)" />
+    <param name="camera_pitch_servo_command_topic" value="$(arg command_topic)" />
+    <param name="camera_pitch_servo_pwm_topic" value="$(arg pwm_topic)" />
+  </node>
+</launch>
