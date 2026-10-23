@@ -1,0 +1,19 @@
+<launch>
+  <!--
+    RK3576 GPIO0_B4_D hardware adapter.
+
+    Starting this launch file does not enable or export PWM. A deliberate
+    SetBool service call and a fresh non-latched PWM command are both required.
+    The board device tree must first move GPIO0_B4_D from UART4_TX_M2 to
+    PWM1_CH0_M0 and register /pwm@2add0000.
+  -->
+  <arg name="config" default="$(find png_planner)/config/core_tuning.yaml" />
+  <arg name="expected_of_fullname" default="/pwm@2add0000" />
+
+  <node pkg="png_planner" type="camera_pitch_servo_sysfs_pwm"
+        name="camera_pitch_servo_sysfs_pwm" output="screen" required="true">
+    <rosparam command="load" file="$(arg config)" />
+    <param name="camera_pitch_servo_pwm_of_fullname"
+           value="$(arg expected_of_fullname)" />
+  </node>
+</launch>

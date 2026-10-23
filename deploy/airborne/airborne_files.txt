@@ -15,6 +15,7 @@ src/kcf_msgs/msg/Bbox.msg
 src/png_planner/src/fixed_camera_ibvs.cpp
 src/png_planner/src/radar_approach_handover.cpp
 src/png_planner/src/camera_pitch_servo_open_loop.cpp
+src/png_planner/src/camera_pitch_servo_sysfs_pwm.cpp
 src/png_planner/src/los_rate_kalman.h
 src/png_planner/config/core_tuning.yaml
 src/png_planner/config/fixed_camera_ibvs.yaml
@@ -22,6 +23,7 @@ src/png_planner/config/radar_approach_handover.yaml
 src/png_planner/launch/fixed_camera_ibvs.launch
 src/png_planner/launch/radar_approach_intercept.launch
 src/png_planner/launch/camera_pitch_servo_open_loop.launch
+src/png_planner/launch/camera_pitch_servo_sysfs_pwm.launch
 
 tools/field/README.md
 tools/field/start_visual_intercept.sh

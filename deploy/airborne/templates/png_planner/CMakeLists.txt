@@ -51,8 +51,13 @@ add_executable(camera_pitch_servo_open_loop
 add_dependencies(camera_pitch_servo_open_loop ${catkin_EXPORTED_TARGETS})
 target_link_libraries(camera_pitch_servo_open_loop ${catkin_LIBRARIES})
 
+add_executable(camera_pitch_servo_sysfs_pwm
+  src/camera_pitch_servo_sysfs_pwm.cpp)
+add_dependencies(camera_pitch_servo_sysfs_pwm ${catkin_EXPORTED_TARGETS})
+target_link_libraries(camera_pitch_servo_sysfs_pwm ${catkin_LIBRARIES})
+
 install(TARGETS fixed_camera_ibvs radar_approach_handover
-  camera_pitch_servo_open_loop
+  camera_pitch_servo_open_loop camera_pitch_servo_sysfs_pwm
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 install(DIRECTORY launch config

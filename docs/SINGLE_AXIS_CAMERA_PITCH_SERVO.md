@@ -32,8 +32,7 @@ roslaunch png_planner camera_pitch_servo_open_loop.launch
 
 它把角度指令限速后换算为 `/camera_pitch_servo/pulse_width_us`
 （`std_msgs/UInt16`）。按S001M规格书默认使用50 Hz、500/1500/2500 us和
-180度行程。该节点尚不访问RK3576的PWM寄存器或`pwmchip`；硬件接入后再补最后
-一层“脉宽话题到指定硬件PWM通道”的驱动。
+180度行程。该节点本身不访问RK3576的PWM寄存器或`pwmchip`。
 
 为避免节点启动或驱动晚启动时产生意外动作，当前开环层采用两级安全门：
 
@@ -55,6 +54,57 @@ rosservice call /camera_pitch_servo/set_output_enabled "data: false"
 `/camera_pitch_servo/pulse_width_us` 不再锁存；硬件驱动后启动时不会收到旧脉宽。
 `/camera_pitch_servo/output_enabled` 表示安全门状态，
 `/camera_pitch_servo/command_valid` 表示角度指令是否仍在超时时间内。
+
+当前同时提供独立的 Linux sysfs PWM 适配节点：
+
+```bash
+roslaunch png_planner camera_pitch_servo_sysfs_pwm.launch
+```
+
+仅启动该节点不会导出、配置或使能 PWM。硬件层还需要显式调用第二个服务：
+
+```bash
+rosservice call /camera_pitch_servo/set_hardware_output_enabled "data: true"
+```
+
+硬件层武装以后，必须让开环换算层经历一次“关闭—重新打开”，然后再发送新的
+角度指令；这样可防止硬件层把开环节点仍在周期发布的旧目标当成新指令。完成这
+个握手并收到新的非锁存脉宽后，硬件层才会访问 sysfs。任意一层关闭都会停止并
+释放 PWM。状态话题为
+`/camera_pitch_servo/hardware_armed` 和 `/camera_pitch_servo/hardware_active`。
+
+### GPIO0_B4_D硬件映射
+
+板上舵机信号线接在 `GPIO0_B4_D`。RK3576中该针脚对应：
+
+```text
+GPIO编号：GPIO0_B4 = 12
+PWM复用：PWM1_CH0_M0
+设备树控制器：pwm1_6ch_0
+OF节点：/pwm@2add0000
+PWM通道：0
+```
+
+2026-10-23读取实机设备树得到的现状是：`uart4` 已启用并使用
+`uart4m2_xfer`，也就是把 `GPIO0_B4/B5` 配成 `UART4_TX/RX`；与此同时
+`pwm1_6ch_0` 是 `disabled`。因此当前镜像不能直接输出舵机PWM。正式测试前必须
+在板级DTS中完成以下互斥切换并重新生成镜像/DTB：
+
+```dts
+&uart4 {
+    status = "disabled";
+};
+
+&pwm1_6ch_0 {
+    pinctrl-names = "active";
+    pinctrl-0 = <&pwm1m0_ch0>;
+    status = "okay";
+};
+```
+
+不能使用当前 `/sys/class/pwm/pwmchip0`：它对应 `/pwm@2ade6000`，已经被
+屏幕背光占用。硬件适配节点不依赖 `pwmchipN` 的动态编号，而是逐个核对
+`device/uevent` 中的 `OF_FULLNAME=/pwm@2add0000`；找不到时拒绝输出。
 
 ### 角度反馈（可选）
 
@@ -121,10 +171,16 @@ camera_mount_pitch = fixed_mount_pitch - theta_servo
 - `camera_pitch_servo_pwm_reverse`：舵机机械安装方向反相。
 - `camera_pitch_servo_driver_max_rate_degps`：开环PWM层的二次安全限速。
 - `camera_pitch_servo_command_timeout_sec`：角度指令超时回中时间。
+- `camera_pitch_servo_pwm_of_fullname`：GPIO0_B4_D对应的PWM控制器OF路径。
+- `camera_pitch_servo_pwm_channel`：控制器内通道，本连接固定为0。
+- `camera_pitch_servo_hardware_enable_service`：硬件层独立安全门服务。
+- `camera_pitch_servo_hardware_armed_topic`：硬件层已武装状态。
+- `camera_pitch_servo_hardware_active_topic`：sysfs PWM实际已使能状态。
 
 首次接实物时，先将角度范围临时限制为 `-5°~+5°`，飞机不上桨并固定机身；确认舵机使用独立 3.7--4.2 V 电源且与 RK3576 共地。先保持输出门关闭检查话题，再由现场人员明确同意后使能。用手上下移动目标确认：目标向画面上方移动时，指令应为正并使相机上抬。符号确认后再逐步放宽机械范围。
 
-当前 RK3576 只暴露了一个已经被屏幕背光占用的 `pwmchip0/pwm0`。在载板具体信号针脚及其设备树 PWM 通道确认前，禁止把舵机驱动绑定到该通道。
+当前 RK3576 只暴露了一个已经被屏幕背光占用的 `pwmchip0/pwm0`。在设备树
+完成上述UART4到PWM1_CH0的切换以前，禁止进行实物舵机输出测试。
 
 ## 5. 仿真开关
 

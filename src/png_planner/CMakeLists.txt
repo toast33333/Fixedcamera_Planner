@@ -353,6 +353,12 @@ add_dependencies(camera_pitch_servo_open_loop
   ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(camera_pitch_servo_open_loop ${catkin_LIBRARIES})
 
+add_executable(camera_pitch_servo_sysfs_pwm
+  src/camera_pitch_servo_sysfs_pwm.cpp)
+add_dependencies(camera_pitch_servo_sysfs_pwm
+  ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(camera_pitch_servo_sysfs_pwm ${catkin_LIBRARIES})
+
 add_executable(fixed_camera_ibvs src/fixed_camera_ibvs.cpp)
 add_dependencies(fixed_camera_ibvs ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(fixed_camera_ibvs ${catkin_LIBRARIES})
@@ -361,7 +367,7 @@ add_executable(radar_approach_handover src/radar_approach_handover.cpp)
 add_dependencies(radar_approach_handover ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(radar_approach_handover ${catkin_LIBRARIES} ${GEOGRAPHICLIB_LIBRARY})
 
-install(TARGETS camera_pitch_servo_open_loop
+install(TARGETS camera_pitch_servo_open_loop camera_pitch_servo_sysfs_pwm
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

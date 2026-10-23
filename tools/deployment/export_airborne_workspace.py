@@ -155,6 +155,13 @@ def validate_export(workspace: Path) -> list[Path]:
         / "png_planner"
         / "src"
         / "camera_pitch_servo_open_loop.cpp",
+        workspace
+        / "src"
+        / "Fixedcamera_Planner"
+        / "src"
+        / "png_planner"
+        / "src"
+        / "camera_pitch_servo_sysfs_pwm.cpp",
     )
     missing = [path for path in required if not path.is_file()]
     if missing:

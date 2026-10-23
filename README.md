@@ -122,6 +122,13 @@ command, and disarming immediately stops publishing pulse commands. See
 `docs/SINGLE_AXIS_CAMERA_PITCH_SERVO.md` for the topics, service and first
 hardware-test procedure.
 
+`camera_pitch_servo_sysfs_pwm` is the separate, default-disarmed RK3576
+hardware adapter for the selected `GPIO0_B4_D / PWM1_CH0_M0` signal. It finds
+the controller by its device-tree path (`/pwm@2add0000`) instead of trusting a
+dynamic `pwmchipN` number. The current board image still assigns that pin to
+UART4, so the documented device-tree switch is required before any hardware
+output test.
+
 This simulation branch intentionally excludes the independent circle-flight
 test and AT-Link integration.
 
