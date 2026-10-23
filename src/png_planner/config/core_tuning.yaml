@@ -146,6 +146,12 @@ camera_pitch_servo_return_rate_degps: 20.0
 
 # S001M open-loop angle-to-PWM mapper. These values follow the supplied
 # DS-S001M-0.6P8.5-CL-P datasheet. No RK3576 pin is accessed by this layer.
+# The output gate is false by default. Even after it is armed through the
+# SetBool service, the mapper waits for a new angle command before publishing.
+camera_pitch_servo_output_enabled: false
+camera_pitch_servo_enable_service: /camera_pitch_servo/set_output_enabled
+camera_pitch_servo_output_enabled_topic: /camera_pitch_servo/output_enabled
+camera_pitch_servo_command_valid_topic: /camera_pitch_servo/command_valid
 camera_pitch_servo_pwm_min_us: 500
 camera_pitch_servo_pwm_neutral_us: 1500
 camera_pitch_servo_pwm_max_us: 2500

@@ -116,6 +116,11 @@ after the complete base configurations, so its duplicate keys take priority.
 integration. It converts `/camera_pitch_servo/command_deg` into a bounded,
 rate-limited `/camera_pitch_servo/pulse_width_us`. It deliberately does not
 access an RK3576 PWM pin until the carrier pin and `pwmchip/channel` are known.
+The PWM output gate defaults to disabled. Starting the node therefore emits no
+pulse command; after an explicit arm request it still waits for a fresh angle
+command, and disarming immediately stops publishing pulse commands. See
+`docs/SINGLE_AXIS_CAMERA_PITCH_SERVO.md` for the topics, service and first
+hardware-test procedure.
 
 This simulation branch intentionally excludes the independent circle-flight
 test and AT-Link integration.

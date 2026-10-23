@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   sensor_msgs
   std_msgs
+  std_srvs
   tf
 )
 
@@ -26,7 +27,7 @@ if(NOT GEOGRAPHICLIB_INCLUDE_DIR OR NOT GEOGRAPHICLIB_LIBRARY)
 endif()
 
 catkin_package(CATKIN_DEPENDS
-  detection_msgs geometry_msgs kcf_msgs roscpp sensor_msgs std_msgs tf
+  detection_msgs geometry_msgs kcf_msgs roscpp sensor_msgs std_msgs std_srvs tf
 )
 
 include_directories(

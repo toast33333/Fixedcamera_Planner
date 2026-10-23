@@ -35,6 +35,27 @@ roslaunch png_planner camera_pitch_servo_open_loop.launch
 180度行程。该节点尚不访问RK3576的PWM寄存器或`pwmchip`；硬件接入后再补最后
 一层“脉宽话题到指定硬件PWM通道”的驱动。
 
+为避免节点启动或驱动晚启动时产生意外动作，当前开环层采用两级安全门：
+
+1. `camera_pitch_servo_output_enabled` 默认是 `false`，启动后不会发布任何 PWM 脉宽；
+2. 显式使能后，节点仍会丢弃使能前的旧指令，必须收到一帧新的角度指令才开始发布。
+
+使能服务为：
+
+```bash
+rosservice call /camera_pitch_servo/set_output_enabled "data: true"
+```
+
+停止输出为：
+
+```bash
+rosservice call /camera_pitch_servo/set_output_enabled "data: false"
+```
+
+`/camera_pitch_servo/pulse_width_us` 不再锁存；硬件驱动后启动时不会收到旧脉宽。
+`/camera_pitch_servo/output_enabled` 表示安全门状态，
+`/camera_pitch_servo/command_valid` 表示角度指令是否仍在超时时间内。
+
 ### 角度反馈（可选）
 
 - 话题：`/camera_pitch_servo/feedback_deg`
@@ -95,11 +116,15 @@ camera_mount_pitch = fixed_mount_pitch - theta_servo
 - `camera_pitch_servo_return_on_loss`：丢失目标后是否回中。
 - `camera_pitch_servo_return_rate_degps`：回中速度。
 - `camera_pitch_servo_pwm_min_us/neutral_us/max_us`：S001M脉宽标定值。
+- `camera_pitch_servo_output_enabled`：启动时输出安全门，实机保持 `false`。
+- `camera_pitch_servo_enable_service`：运行中显式打开/关闭输出的 `SetBool` 服务。
 - `camera_pitch_servo_pwm_reverse`：舵机机械安装方向反相。
 - `camera_pitch_servo_driver_max_rate_degps`：开环PWM层的二次安全限速。
 - `camera_pitch_servo_command_timeout_sec`：角度指令超时回中时间。
 
-首次接实物时，先将角度范围临时限制为 `-5°~+5°`，飞机不上桨并固定机身，用手上下移动目标确认：目标向画面上方移动时，指令应为正并使相机上抬。符号确认后再逐步放宽机械范围。
+首次接实物时，先将角度范围临时限制为 `-5°~+5°`，飞机不上桨并固定机身；确认舵机使用独立 3.7--4.2 V 电源且与 RK3576 共地。先保持输出门关闭检查话题，再由现场人员明确同意后使能。用手上下移动目标确认：目标向画面上方移动时，指令应为正并使相机上抬。符号确认后再逐步放宽机械范围。
+
+当前 RK3576 只暴露了一个已经被屏幕背光占用的 `pwmchip0/pwm0`。在载板具体信号针脚及其设备树 PWM 通道确认前，禁止把舵机驱动绑定到该通道。
 
 ## 5. 仿真开关
 

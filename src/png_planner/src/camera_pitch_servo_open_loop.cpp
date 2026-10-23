@@ -1,7 +1,9 @@
 #include <geometry_msgs/Vector3Stamped.h>
 #include <ros/ros.h>
+#include <std_msgs/Bool.h>
 #include <std_msgs/Float64.h>
 #include <std_msgs/UInt16.h>
+#include <std_srvs/SetBool.h>
 
 #include <algorithm>
 #include <cmath>
@@ -28,6 +30,14 @@ class CameraPitchServoOpenLoop {
                             "/camera_pitch_servo/estimated_deg");
     pnh_.param<std::string>("camera_pitch_servo_open_loop_state_topic", state_topic_,
                             "/camera_pitch_servo/open_loop_state");
+    pnh_.param<std::string>("camera_pitch_servo_enable_service", enable_service_name_,
+                            "/camera_pitch_servo/set_output_enabled");
+    pnh_.param<std::string>("camera_pitch_servo_output_enabled_topic",
+                            output_enabled_topic_,
+                            "/camera_pitch_servo/output_enabled");
+    pnh_.param<std::string>("camera_pitch_servo_command_valid_topic",
+                            command_valid_topic_,
+                            "/camera_pitch_servo/command_valid");
     pnh_.param("camera_pitch_servo_neutral_deg", neutral_deg_, 0.0);
     pnh_.param("camera_pitch_servo_min_deg", command_min_deg_, -25.0);
     pnh_.param("camera_pitch_servo_max_deg", command_max_deg_, 25.0);
@@ -43,6 +53,7 @@ class CameraPitchServoOpenLoop {
     pnh_.param("camera_pitch_servo_command_timeout_sec", command_timeout_sec_, 0.5);
     pnh_.param("camera_pitch_servo_return_on_command_timeout",
                 return_on_timeout_, true);
+    pnh_.param("camera_pitch_servo_output_enabled", output_enabled_, false);
 
     validateParameters();
     target_deg_ = neutral_deg_;
@@ -51,9 +62,17 @@ class CameraPitchServoOpenLoop {
 
     command_sub_ = nh_.subscribe(command_topic_, 5,
                                  &CameraPitchServoOpenLoop::commandCallback, this);
-    pwm_pub_ = nh_.advertise<std_msgs::UInt16>(pwm_topic_, 1, true);
+    // PWM commands are deliberately not latched. A hardware adapter that
+    // starts later must never receive an old pulse from this mapper.
+    pwm_pub_ = nh_.advertise<std_msgs::UInt16>(pwm_topic_, 1, false);
     estimated_pub_ = nh_.advertise<std_msgs::Float64>(estimated_topic_, 1, true);
     state_pub_ = nh_.advertise<geometry_msgs::Vector3Stamped>(state_topic_, 1);
+    output_enabled_pub_ =
+        nh_.advertise<std_msgs::Bool>(output_enabled_topic_, 1, true);
+    command_valid_pub_ =
+        nh_.advertise<std_msgs::Bool>(command_valid_topic_, 1, true);
+    enable_service_ = nh_.advertiseService(
+        enable_service_name_, &CameraPitchServoOpenLoop::enableCallback, this);
     timer_ = nh_.createTimer(ros::Duration(1.0 / update_rate_hz_),
                              &CameraPitchServoOpenLoop::update, this);
 
@@ -63,6 +82,13 @@ class CameraPitchServoOpenLoop {
              command_topic_.c_str(), pwm_topic_.c_str(), command_min_deg_,
              command_max_deg_, pwm_min_us_, pwm_neutral_us_, pwm_max_us_,
              pwm_period_us_, pwm_reverse_ ? "true" : "false");
+    if (output_enabled_) {
+      ROS_WARN("Camera pitch PWM output is armed by configuration, but no pulse "
+               "will be published until a fresh angle command is received");
+    } else {
+      ROS_INFO("Camera pitch PWM output is disabled; arm explicitly through %s",
+               enable_service_name_.c_str());
+    }
   }
 
  private:
@@ -92,9 +118,47 @@ class CameraPitchServoOpenLoop {
       ROS_WARN_THROTTLE(1.0, "Ignoring non-finite camera pitch command");
       return;
     }
+    if (!output_enabled_) {
+      ROS_WARN_THROTTLE(2.0,
+                        "Ignoring camera pitch command while PWM output is disabled");
+      return;
+    }
+    if (message->data < command_min_deg_ || message->data > command_max_deg_) {
+      ROS_WARN_THROTTLE(1.0,
+                        "Clamping camera pitch command %.2f deg to [%.2f, %.2f] deg",
+                        message->data, command_min_deg_, command_max_deg_);
+    }
     target_deg_ = clampValue(message->data, command_min_deg_, command_max_deg_);
     last_command_receipt_ = ros::Time::now();
     have_command_ = true;
+    command_valid_ = true;
+  }
+
+  bool enableCallback(std_srvs::SetBool::Request& request,
+                      std_srvs::SetBool::Response& response) {
+    const ros::Time now = ros::Time::now();
+    output_enabled_ = request.data;
+
+    // Every arm/disarm transition invalidates any previously received command.
+    // This prevents an old latched/queued angle from moving the mechanism.
+    have_command_ = false;
+    command_valid_ = false;
+    target_deg_ = neutral_deg_;
+    estimated_deg_ = neutral_deg_;
+    last_update_ = now;
+    publishState(now);
+
+    response.success = true;
+    if (output_enabled_) {
+      response.message =
+          "output armed; waiting for a fresh angle command before publishing PWM";
+      ROS_WARN("Camera pitch PWM output ARMED; waiting for a fresh command on %s",
+               command_topic_.c_str());
+    } else {
+      response.message = "output disabled; PWM publishing stopped";
+      ROS_INFO("Camera pitch PWM output DISABLED");
+    }
+    return true;
   }
 
   uint16_t angleToPulse(double command_deg) const {
@@ -122,9 +186,16 @@ class CameraPitchServoOpenLoop {
     last_update_ = now;
     if (!std::isfinite(dt) || dt <= 0.0 || dt > 0.5) dt = 1.0 / update_rate_hz_;
 
-    if (return_on_timeout_ && have_command_ && command_timeout_sec_ > 0.0 &&
+    if (have_command_ && command_timeout_sec_ > 0.0 &&
         (now - last_command_receipt_).toSec() > command_timeout_sec_) {
-      target_deg_ = neutral_deg_;
+      if (command_valid_) {
+        ROS_WARN("Camera pitch command timed out%s",
+                 return_on_timeout_
+                     ? "; returning to neutral at the configured rate limit"
+                     : "; holding the last rate-limited angle");
+      }
+      command_valid_ = false;
+      if (return_on_timeout_) target_deg_ = neutral_deg_;
     }
 
     const double maximum_step = max_rate_degps_ * dt;
@@ -136,9 +207,12 @@ class CameraPitchServoOpenLoop {
 
   void publishState(const ros::Time& stamp) {
     const uint16_t pulse_us = angleToPulse(estimated_deg_);
-    std_msgs::UInt16 pulse;
-    pulse.data = pulse_us;
-    pwm_pub_.publish(pulse);
+    const bool pwm_active = output_enabled_ && have_command_;
+    if (pwm_active) {
+      std_msgs::UInt16 pulse;
+      pulse.data = pulse_us;
+      pwm_pub_.publish(pulse);
+    }
 
     std_msgs::Float64 estimated;
     estimated.data = estimated_deg_;
@@ -149,8 +223,17 @@ class CameraPitchServoOpenLoop {
     state.header.frame_id = "camera_pitch_servo_open_loop";
     state.vector.x = target_deg_;
     state.vector.y = estimated_deg_;
-    state.vector.z = pulse_us;
+    // A zero z value explicitly means that no PWM pulse is being published.
+    state.vector.z = pwm_active ? pulse_us : 0.0;
     state_pub_.publish(state);
+
+    std_msgs::Bool output_enabled;
+    output_enabled.data = output_enabled_;
+    output_enabled_pub_.publish(output_enabled);
+
+    std_msgs::Bool command_valid;
+    command_valid.data = command_valid_;
+    command_valid_pub_.publish(command_valid);
   }
 
   ros::NodeHandle nh_;
@@ -159,12 +242,18 @@ class CameraPitchServoOpenLoop {
   ros::Publisher pwm_pub_;
   ros::Publisher estimated_pub_;
   ros::Publisher state_pub_;
+  ros::Publisher output_enabled_pub_;
+  ros::Publisher command_valid_pub_;
+  ros::ServiceServer enable_service_;
   ros::Timer timer_;
 
   std::string command_topic_;
   std::string pwm_topic_;
   std::string estimated_topic_;
   std::string state_topic_;
+  std::string enable_service_name_;
+  std::string output_enabled_topic_;
+  std::string command_valid_topic_;
   double neutral_deg_{0.0};
   double command_min_deg_{-25.0};
   double command_max_deg_{25.0};
@@ -178,7 +267,9 @@ class CameraPitchServoOpenLoop {
   double max_rate_degps_{60.0};
   double command_timeout_sec_{0.5};
   bool return_on_timeout_{true};
+  bool output_enabled_{false};
   bool have_command_{false};
+  bool command_valid_{false};
   double target_deg_{0.0};
   double estimated_deg_{0.0};
   ros::Time last_command_receipt_;

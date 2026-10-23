@@ -4,11 +4,14 @@
   <arg name="config" default="$(find png_planner)/config/core_tuning.yaml" />
   <arg name="command_topic" default="/camera_pitch_servo/command_deg" />
   <arg name="pwm_topic" default="/camera_pitch_servo/pulse_width_us" />
+  <!-- A deliberate runtime service call is still required when false. -->
+  <arg name="output_enabled" default="false" />
 
   <node pkg="png_planner" type="camera_pitch_servo_open_loop"
         name="camera_pitch_servo_open_loop" output="screen" required="true">
     <rosparam command="load" file="$(arg config)" />
     <param name="camera_pitch_servo_command_topic" value="$(arg command_topic)" />
     <param name="camera_pitch_servo_pwm_topic" value="$(arg pwm_topic)" />
+    <param name="camera_pitch_servo_output_enabled" value="$(arg output_enabled)" />
   </node>
 </launch>

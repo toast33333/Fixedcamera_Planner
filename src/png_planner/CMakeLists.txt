@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  std_srvs
   geometry_msgs
   sensor_msgs
   nav_msgs
@@ -172,7 +173,7 @@ endif()
 catkin_package(
 #  INCLUDE_DIRS include
   # LIBRARIES png_planner
- CATKIN_DEPENDS roscpp rospy std_msgs geometry_msgs sensor_msgs nav_msgs visualization_msgs tf tf2 quadrotor_msgs kcf_msgs detection_msgs mavros_msgs
+ CATKIN_DEPENDS roscpp rospy std_msgs std_srvs geometry_msgs sensor_msgs nav_msgs visualization_msgs tf tf2 quadrotor_msgs kcf_msgs detection_msgs mavros_msgs
 #  DEPENDS system_lib
 
 )
