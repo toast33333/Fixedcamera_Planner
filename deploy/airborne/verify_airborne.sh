@@ -20,6 +20,8 @@ rospack find png_planner >/dev/null
 test -x "$WS_DIR/devel/lib/png_planner/fixed_camera_ibvs"
 test -x "$WS_DIR/devel/lib/png_planner/radar_approach_handover"
 test -x "$WS_DIR/devel/lib/png_planner/camera_pitch_servo_open_loop"
+test -x "$WS_DIR/devel/lib/png_planner/camera_pitch_servo_sysfs_pwm"
+test -f "$WS_DIR/src/Fixedcamera_Planner/src/png_planner/launch/camera_pitch_servo_hardware.launch"
 
 echo "机载工作区静态检查通过。"
 echo "RKNN 模型: $MODEL_PATH"

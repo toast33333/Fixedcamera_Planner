@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -79,6 +80,8 @@ class CameraPitchServoSysfsPwm {
     pnh_.param("camera_pitch_servo_pwm_period_us", pwm_period_us_, 20000);
     pnh_.param("camera_pitch_servo_pwm_min_us", pwm_min_us_, 500);
     pnh_.param("camera_pitch_servo_pwm_max_us", pwm_max_us_, 2500);
+    pnh_.param("camera_pitch_servo_hardware_command_timeout_sec",
+               hardware_command_timeout_sec_, 0.3);
 
     validateParameters();
     pwm_sub_ = nh_.subscribe(pwm_topic_, 1,
@@ -95,6 +98,11 @@ class CameraPitchServoSysfsPwm {
         nh_.advertise<std_msgs::Bool>(hardware_active_topic_, 1, true);
     hardware_enable_server_ = nh_.advertiseService(
         hardware_enable_service_, &CameraPitchServoSysfsPwm::enableCallback, this);
+    const double watchdog_period_sec =
+        std::min(0.1, hardware_command_timeout_sec_ * 0.5);
+    watchdog_timer_ = nh_.createWallTimer(
+        ros::WallDuration(watchdog_period_sec),
+        &CameraPitchServoSysfsPwm::watchdogCallback, this);
     publishState();
 
     ROS_WARN("Camera pitch sysfs PWM adapter is SAFE/OFF. It will not access "
@@ -123,6 +131,11 @@ class CameraPitchServoSysfsPwm {
     if (pwm_channel_ < 0 || pwm_period_us_ <= 0 || pwm_min_us_ <= 0 ||
         pwm_min_us_ >= pwm_max_us_ || pwm_max_us_ >= pwm_period_us_) {
       throw std::runtime_error("invalid camera pitch sysfs PWM parameters");
+    }
+    if (!std::isfinite(hardware_command_timeout_sec_) ||
+        hardware_command_timeout_sec_ <= 0.0) {
+      throw std::runtime_error(
+          "camera_pitch_servo_hardware_command_timeout_sec must be positive");
     }
   }
 
@@ -223,6 +236,7 @@ class CameraPitchServoSysfsPwm {
       ensureOutputReady(pulse_us);
       writeTextFile(channel_path_ + "/duty_cycle",
                     std::to_string(pulse_us * 1000));
+      last_pwm_receipt_wall_ = ros::WallTime::now();
     } catch (const std::exception& error) {
       ROS_ERROR("Camera pitch PWM hardware write failed: %s", error.what());
       hardware_armed_ = false;
@@ -234,6 +248,28 @@ class CameraPitchServoSysfsPwm {
       }
       publishState();
     }
+  }
+
+  void watchdogCallback(const ros::WallTimerEvent&) {
+    if (!hardware_active_) return;
+    const double age_sec =
+        (ros::WallTime::now() - last_pwm_receipt_wall_).toSec();
+    if (!std::isfinite(age_sec) || age_sec <= hardware_command_timeout_sec_) {
+      return;
+    }
+
+    ROS_ERROR("Camera pitch PWM watchdog timed out after %.3f s; "
+              "disarming and disabling hardware output",
+              age_sec);
+    hardware_armed_ = false;
+    fresh_pwm_after_arm_ = false;
+    mapper_disarmed_since_hardware_arm_ = false;
+    try {
+      stopOutput();
+    } catch (const std::exception& error) {
+      ROS_ERROR("Camera pitch PWM watchdog cleanup failed: %s", error.what());
+    }
+    publishState();
   }
 
   std::string discoverPwmChip() const {
@@ -355,6 +391,7 @@ class CameraPitchServoSysfsPwm {
   ros::Publisher hardware_armed_pub_;
   ros::Publisher hardware_active_pub_;
   ros::ServiceServer hardware_enable_server_;
+  ros::WallTimer watchdog_timer_;
 
   std::string pwm_topic_;
   std::string mapper_enabled_topic_;
@@ -370,6 +407,7 @@ class CameraPitchServoSysfsPwm {
   int pwm_period_us_{20000};
   int pwm_min_us_{500};
   int pwm_max_us_{2500};
+  double hardware_command_timeout_sec_{0.3};
   bool mapper_enabled_{false};
   bool have_mapper_enabled_state_{false};
   bool mapper_command_valid_{false};
@@ -378,6 +416,7 @@ class CameraPitchServoSysfsPwm {
   bool fresh_pwm_after_arm_{false};
   bool hardware_active_{false};
   bool owns_export_{false};
+  ros::WallTime last_pwm_receipt_wall_;
 };
 
 int main(int argc, char** argv) {

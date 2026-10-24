@@ -1,0 +1,18 @@
+<launch>
+  <!--
+    Starts both parts of the RK3576 camera-pitch servo path in SAFE/OFF state.
+    Starting this file alone does not export a PWM channel or drive the servo.
+  -->
+  <arg name="config" default="$(find png_planner)/config/core_tuning.yaml" />
+  <arg name="expected_of_fullname" default="/pwm@2add0000" />
+
+  <include file="$(find png_planner)/launch/camera_pitch_servo_open_loop.launch">
+    <arg name="config" value="$(arg config)" />
+    <arg name="output_enabled" value="false" />
+  </include>
+
+  <include file="$(find png_planner)/launch/camera_pitch_servo_sysfs_pwm.launch">
+    <arg name="config" value="$(arg config)" />
+    <arg name="expected_of_fullname" value="$(arg expected_of_fullname)" />
+  </include>
+</launch>

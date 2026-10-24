@@ -23,6 +23,7 @@ src/png_planner/config/radar_approach_handover.yaml
 src/png_planner/launch/fixed_camera_ibvs.launch
 src/png_planner/launch/radar_approach_intercept.launch
 src/png_planner/launch/camera_pitch_servo_open_loop.launch
+src/png_planner/launch/camera_pitch_servo_hardware.launch
 src/png_planner/launch/camera_pitch_servo_sysfs_pwm.launch
 
 tools/field/README.md

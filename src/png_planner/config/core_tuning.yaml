@@ -163,14 +163,14 @@ camera_pitch_servo_driver_max_rate_degps: 60.0
 camera_pitch_servo_command_timeout_sec: 0.5
 camera_pitch_servo_return_on_command_timeout: true
 
-# RK3576 hardware adapter for the GPIO0_B4_D signal pin. The running board
-# currently muxes this pin as UART4_TX_M2 and keeps PWM1_CH0 disabled, so the
-# adapter must not be started for an actual servo test until the device tree is
-# changed and rebooted. Runtime hardware output has no startup-enable parameter:
-# it can only be armed deliberately through the SetBool service below.
+# RK3576 hardware adapter for the GPIO0_B4_D signal pin. The adapter checks the
+# controller's OF path instead of relying on the dynamic pwmchip number. Runtime
+# hardware output has no startup-enable parameter: it can only be armed
+# deliberately through the SetBool service below.
 camera_pitch_servo_pwm_of_fullname: /pwm@2add0000
 camera_pitch_servo_pwm_channel: 0
 camera_pitch_servo_pwm_sysfs_root: /sys/class/pwm
+camera_pitch_servo_hardware_command_timeout_sec: 0.3
 camera_pitch_servo_mapper_output_enabled_topic: /camera_pitch_servo/output_enabled
 camera_pitch_servo_mapper_command_valid_topic: /camera_pitch_servo/command_valid
 camera_pitch_servo_hardware_enable_service: /camera_pitch_servo/set_hardware_output_enabled

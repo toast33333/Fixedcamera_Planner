@@ -61,6 +61,12 @@ rosservice call /camera_pitch_servo/set_output_enabled "data: false"
 roslaunch png_planner camera_pitch_servo_sysfs_pwm.launch
 ```
 
+也可以一次启动角度换算层和硬件层；二者仍然保持关闭，不会输出PWM：
+
+```bash
+roslaunch png_planner camera_pitch_servo_hardware.launch
+```
+
 仅启动该节点不会导出、配置或使能 PWM。硬件层还需要显式调用第二个服务：
 
 ```bash
@@ -85,10 +91,9 @@ OF节点：/pwm@2add0000
 PWM通道：0
 ```
 
-2026-10-23读取实机设备树得到的现状是：`uart4` 已启用并使用
-`uart4m2_xfer`，也就是把 `GPIO0_B4/B5` 配成 `UART4_TX/RX`；与此同时
-`pwm1_6ch_0` 是 `disabled`。因此当前镜像不能直接输出舵机PWM。正式测试前必须
-在板级DTS中完成以下互斥切换并重新生成镜像/DTB：
+2026-10-24实机复核结果是：`uart4=disabled`、`pwm1_6ch_0=okay`，目标控制器
+已经注册为`/sys/class/pwm/pwmchip0`且OF路径为`/pwm@2add0000`；原屏幕背光PWM
+顺延为`pwmchip1`。对应的板级DTS互斥配置为：
 
 ```dts
 &uart4 {
@@ -102,9 +107,11 @@ PWM通道：0
 };
 ```
 
-不能使用当前 `/sys/class/pwm/pwmchip0`：它对应 `/pwm@2ade6000`，已经被
-屏幕背光占用。硬件适配节点不依赖 `pwmchipN` 的动态编号，而是逐个核对
+硬件适配节点不依赖 `pwmchipN` 的动态编号，而是逐个核对
 `device/uevent` 中的 `OF_FULLNAME=/pwm@2add0000`；找不到时拒绝输出。
+
+硬件层还带有独立的PWM消息看门狗，默认超时为0.3秒。硬件输出已经激活后，
+如果换算节点退出或PWM消息流中断，硬件层会自动撤销武装、关闭并释放该通道。
 
 ### 角度反馈（可选）
 
@@ -173,14 +180,15 @@ camera_mount_pitch = fixed_mount_pitch - theta_servo
 - `camera_pitch_servo_command_timeout_sec`：角度指令超时回中时间。
 - `camera_pitch_servo_pwm_of_fullname`：GPIO0_B4_D对应的PWM控制器OF路径。
 - `camera_pitch_servo_pwm_channel`：控制器内通道，本连接固定为0。
+- `camera_pitch_servo_hardware_command_timeout_sec`：PWM消息中断后的硬件关闭超时。
 - `camera_pitch_servo_hardware_enable_service`：硬件层独立安全门服务。
 - `camera_pitch_servo_hardware_armed_topic`：硬件层已武装状态。
 - `camera_pitch_servo_hardware_active_topic`：sysfs PWM实际已使能状态。
 
 首次接实物时，先将角度范围临时限制为 `-5°~+5°`，飞机不上桨并固定机身；确认舵机使用独立 3.7--4.2 V 电源且与 RK3576 共地。先保持输出门关闭检查话题，再由现场人员明确同意后使能。用手上下移动目标确认：目标向画面上方移动时，指令应为正并使相机上抬。符号确认后再逐步放宽机械范围。
 
-当前 RK3576 只暴露了一个已经被屏幕背光占用的 `pwmchip0/pwm0`。在设备树
-完成上述UART4到PWM1_CH0的切换以前，禁止进行实物舵机输出测试。
+设备树映射虽已就绪，首次实物动作仍必须在飞机不上桨、机身固定、舵机独立供电
+并与RK3576共地的条件下进行；完成角度—PWM标定前保持两级输出门关闭。
 
 ## 5. 仿真开关
 
