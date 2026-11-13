@@ -15,7 +15,8 @@ python3 tools/deployment/export_airborne_workspace.py \
 
 The exported workspace contains the timestamped detector, one validated RKNN
 model, the fixed-camera controller, radar approach/handover controller,
-S001M open-loop PWM mapper, their active configuration and the field start
+S001M open-loop PWM mapper and RK3576 PWM backend, the circle-flight test,
+AT-Link v3.2 integration, their active configuration and the field start
 modes. See
 `docs/代码结构与机载部署.md` and `deploy/airborne/README.md` for the exact
 boundary and installation procedure. The generated workspace is also published
@@ -129,8 +130,11 @@ dynamic `pwmchipN` number. The current board image still assigns that pin to
 UART4, so the documented device-tree switch is required before any hardware
 output test.
 
-This simulation branch intentionally excludes the independent circle-flight
-test and AT-Link integration.
+The main branch is the integrated research and field-development line. It
+contains the independent circle-flight test, AT-Link v3.2 integration,
+single-axis camera servo, simulation tools and aircraft deployment exporter.
+`README_SIMULATION.md` describes the simulation-only subset when a portable
+simulation package is needed.
 
 基于 ROS1 catkin 的视觉制导工作区，核心目标是根据图像检测框驱动无人机进行偏航跟踪、2D PNG 导引和 3D PNG 导引。
 

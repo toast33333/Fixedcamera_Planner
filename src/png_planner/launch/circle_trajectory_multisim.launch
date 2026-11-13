@@ -1,0 +1,44 @@
+<launch>
+  <arg name="results_dir" default="/tmp/circle_trajectory_multisim" />
+  <arg name="minimum_speed" default="5.0" />
+  <arg name="maximum_speed" default="15.0" />
+  <arg name="speed_step" default="2.0" />
+  <arg name="start_radius" default="20.0" />
+  <arg name="radial_rate" default="0.5" />
+  <arg name="trajectory_error_limit" default="3.0" />
+  <arg name="clockwise" default="false" />
+  <arg name="target_altitude_m" default="5.0" />
+  <arg name="xy_velocity_limit_mps" default="20.0" />
+
+  <group ns="interceptor">
+    <include file="$(find mavros)/launch/px4.launch">
+      <arg name="fcu_url" value="udp://:14541@127.0.0.1:14581" />
+      <arg name="tgt_system" value="2" />
+      <arg name="log_output" value="screen" />
+    </include>
+  </group>
+
+  <node pkg="png_planner" type="circle_trajectory_sitl_manager.py"
+        name="circle_trajectory_sitl_manager" output="screen" required="true">
+    <param name="mavros_namespace" value="/interceptor/mavros" />
+    <param name="target_altitude_m" value="$(arg target_altitude_m)" />
+    <param name="xy_velocity_limit_mps" value="$(arg xy_velocity_limit_mps)" />
+    <param name="start_topic" value="/circle_trajectory/start" />
+    <param name="finished_topic" value="/circle_trajectory/finished" />
+  </node>
+
+  <include file="$(find png_planner)/launch/circle_trajectory_test.launch">
+    <arg name="minimum_speed" value="$(arg minimum_speed)" />
+    <arg name="maximum_speed" value="$(arg maximum_speed)" />
+    <arg name="speed_step" value="$(arg speed_step)" />
+    <arg name="start_radius" value="$(arg start_radius)" />
+    <arg name="radial_rate" value="$(arg radial_rate)" />
+    <arg name="trajectory_error_limit" value="$(arg trajectory_error_limit)" />
+    <arg name="clockwise" value="$(arg clockwise)" />
+    <arg name="require_start_signal" value="true" />
+    <arg name="pose_topic" value="/interceptor/mavros/local_position/pose" />
+    <arg name="velocity_topic" value="/interceptor/mavros/setpoint_velocity/cmd_vel" />
+    <arg name="velocity_feedback_topic" value="/interceptor/mavros/local_position/velocity_local" />
+    <arg name="csv_path" value="$(arg results_dir)/circle_trajectory_test.csv" />
+  </include>
+</launch>

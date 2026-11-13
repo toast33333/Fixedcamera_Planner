@@ -18,8 +18,8 @@ git clone --depth 1 --branch airborne --single-branch \
 src/Fixedcamera_Planner/
 ├── src/detection_msgs/       # RK3576 检测与带采集时间戳 Detection 消息
 ├── src/kcf_msgs/             # 仅保留旧 Bbox 消息兼容定义
-├── src/png_planner/          # 固定相机控制与雷达抵近/交接算法
-└── tools/field/              # 三种无雷达视觉控制启动入口
+├── src/png_planner/          # 拦截、雷达抵近、舵机、圆圈测试与 AT-Link
+└── tools/field/              # 外场、地面、分方向和视觉单测启动入口
 ```
 
 当前唯一随包携带的模型是：
@@ -91,6 +91,14 @@ cd ~/fixed_camera_airborne_ws/src/Fixedcamera_Planner
 ./tools/field/start_intercept_vertical_only.sh
 ```
 
+圆圈飞行、室外地面完整链路和手飞视觉舵机测试分别运行：
+
+```bash
+./tools/field/start_circle_trajectory.sh
+./tools/field/start_intercept_outdoor_ground_test.sh
+./tools/field/start_visual_servo_manual_flight_test.sh
+```
+
 这些脚本不会自动解锁、起飞或切换飞行模式。飞手确认空域、画面和遥控接管均正常
 后，手动把测试机切入 `GUIDED`。
 
@@ -107,7 +115,18 @@ roslaunch png_planner radar_approach_intercept.launch
 默认雷达输入是配置文件指定的话题。接外场雷达前必须核对
 `radar_approach_handover.yaml` 的输入模式、话题、坐标系、时间戳和误差参数。
 
-## 7. 上机前必须核对
+## 7. AT-Link
+
+当前默认使用 `/dev/ttyS6:57600`：
+
+```bash
+roslaunch png_planner atlink_ros_node.launch
+```
+
+节点保留原有地面指令和状态输出，并通过故障码补充 MAVROS 时间同步、视觉话题
+与 MAVROS 状态超时告警。协议细节见 `src/png_planner/vendor/atlink/README.md`。
+
+## 8. 上机前必须核对
 
 1. `core_tuning.yaml` 中相机安装上抬角和相机相对机体中心偏移；
 2. `fixed_camera_ibvs.yaml` 中图像尺寸、内参与实际相机输出一致；

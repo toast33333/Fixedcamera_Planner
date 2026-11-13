@@ -1,0 +1,63 @@
+<launch>
+  <arg name="serial_device" default="$(optenv ATLINK_DEVICE /dev/ttyS6)" />
+  <arg name="baud" default="57600" />
+  <arg name="local_address" default="1" />
+  <arg name="serial" default="" />
+  <arg name="takeoff_altitude" default="5.0" />
+  <arg name="takeoff_altitude_tolerance" default="0.3" />
+  <arg name="takeoff_latitude" default="0.0" />
+  <arg name="takeoff_longitude" default="0.0" />
+  <arg name="arming_service" default="/mavros/cmd/arming" />
+  <arg name="set_mode_service" default="/mavros/set_mode" />
+  <arg name="takeoff_mode" default="GUIDED" />
+  <arg name="hover_seconds" default="2.0" />
+  <arg name="target_setpoint_topic" default="/mavros/setpoint_raw/global" />
+  <arg name="takeoff_service" default="/mavros/cmd/takeoff" />
+  <arg name="state_topic" default="/mavros/state" />
+  <arg name="gps_topic" default="/mavros/global_position/global" />
+  <arg name="relative_altitude_topic" default="/mavros/global_position/rel_alt" />
+  <arg name="velocity_topic" default="/mavros/local_position/velocity_local" />
+  <arg name="pose_topic" default="/mavros/local_position/pose" />
+  <arg name="battery_topic" default="/mavros/battery" />
+  <arg name="detection_topic" default="/object_detections" />
+  <arg name="flight_phase_ext_topic" default="/atlink/flight_phase_ext" />
+  <arg name="timesync_status_topic" default="/mavros/timesync_status" />
+  <arg name="mavros_state_stale_s" default="5.0" />
+  <arg name="timesync_rtt_warn_ms" default="50.0" />
+  <arg name="timesync_warn_hold_s" default="3.0" />
+  <arg name="vision_stale_s" default="5.0" />
+  <arg name="health_startup_grace_s" default="20.0" />
+  <arg name="monitor_vision_health" default="true" />
+
+  <node pkg="png_planner" type="atlink_ros_node" name="atlink_ros_node" output="screen">
+    <param name="serial_device" value="$(arg serial_device)" />
+    <param name="baud" value="$(arg baud)" />
+    <param name="local_address" value="$(arg local_address)" />
+    <param name="serial" value="$(arg serial)" />
+    <param name="takeoff_altitude" value="$(arg takeoff_altitude)" />
+    <param name="takeoff_altitude_tolerance" value="$(arg takeoff_altitude_tolerance)" />
+    <param name="takeoff_latitude" value="$(arg takeoff_latitude)" />
+    <param name="takeoff_longitude" value="$(arg takeoff_longitude)" />
+    <param name="arming_service" value="$(arg arming_service)" />
+    <param name="set_mode_service" value="$(arg set_mode_service)" />
+    <param name="takeoff_mode" value="$(arg takeoff_mode)" />
+    <param name="hover_seconds" value="$(arg hover_seconds)" />
+    <param name="target_setpoint_topic" value="$(arg target_setpoint_topic)" />
+    <param name="takeoff_service" value="$(arg takeoff_service)" />
+    <param name="mavros_state_topic" value="$(arg state_topic)" />
+    <param name="gps_topic" value="$(arg gps_topic)" />
+    <param name="relative_altitude_topic" value="$(arg relative_altitude_topic)" />
+    <param name="velocity_topic" value="$(arg velocity_topic)" />
+    <param name="pose_topic" value="$(arg pose_topic)" />
+    <param name="battery_topic" value="$(arg battery_topic)" />
+    <param name="detection_topic" value="$(arg detection_topic)" />
+    <param name="flight_phase_ext_topic" value="$(arg flight_phase_ext_topic)" />
+    <param name="timesync_status_topic" value="$(arg timesync_status_topic)" />
+    <param name="mavros_state_stale_s" value="$(arg mavros_state_stale_s)" />
+    <param name="timesync_rtt_warn_ms" value="$(arg timesync_rtt_warn_ms)" />
+    <param name="timesync_warn_hold_s" value="$(arg timesync_warn_hold_s)" />
+    <param name="vision_stale_s" value="$(arg vision_stale_s)" />
+    <param name="health_startup_grace_s" value="$(arg health_startup_grace_s)" />
+    <param name="monitor_vision_health" value="$(arg monitor_vision_health)" />
+  </node>
+</launch>
