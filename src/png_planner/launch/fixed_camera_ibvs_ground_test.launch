@@ -1,0 +1,47 @@
+<launch>
+  <!-- Ground-only visual interception test.
+       Real camera detections and MAVROS IMU are used, while pose/velocity are
+       supplied by the companion start script.  The command output is isolated
+       from MAVROS so it cannot control the aircraft. -->
+  <arg name="config" default="$(find png_planner)/config/fixed_camera_ibvs.yaml" />
+  <arg name="core_tuning_config" default="$(find png_planner)/config/core_tuning.yaml" />
+  <arg name="detection_topic" default="/object_detections" />
+  <arg name="attitude_topic" default="/mavros/imu/data" />
+  <arg name="pose_topic" default="/fixed_camera_ibvs/ground_test_pose" />
+  <arg name="velocity_topic" default="/fixed_camera_ibvs/ground_test_velocity" />
+  <arg name="command_topic" default="/fixed_camera_ibvs/ground_test_cmd" />
+  <arg name="forward_speed_mps" default="5.0" />
+
+  <!-- Start both servo nodes for interface testing, but leave both hardware
+       gates OFF.  This ground launch can publish angle commands but cannot
+       export or enable the RK3576 PWM channel. -->
+  <include file="$(find png_planner)/launch/camera_pitch_servo_hardware.launch">
+    <arg name="config" value="$(arg core_tuning_config)" />
+  </include>
+
+  <node pkg="png_planner"
+        type="fixed_camera_ibvs"
+        name="fixed_camera_ibvs"
+        output="screen">
+    <rosparam command="load" file="$(arg config)" />
+    <rosparam command="load" file="$(arg core_tuning_config)" />
+
+    <param name="detection_mode" value="1" />
+    <param name="detection_topic" value="$(arg detection_topic)" />
+    <param name="pose_topic" value="$(arg pose_topic)" />
+    <param name="attitude_topic" value="$(arg attitude_topic)" />
+    <param name="velocity_topic" value="$(arg velocity_topic)" />
+    <param name="command_topic" value="$(arg command_topic)" />
+
+    <param name="enable_horizontal_control" value="true" />
+    <param name="enable_height_control" value="true" />
+    <param name="enable_attitude_compensation" value="true" />
+    <param name="use_pose_orientation" value="false" />
+    <param name="enable_state_valid_topic" value="false" />
+    <param name="enable_forward_speed_topic" value="false" />
+    <param name="enable_camera_pitch_servo" value="true" />
+
+    <param name="V_default" value="$(arg forward_speed_mps)" />
+    <param name="lost_forward_speed" value="0.0" />
+  </node>
+</launch>

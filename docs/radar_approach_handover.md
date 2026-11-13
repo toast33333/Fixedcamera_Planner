@@ -5,7 +5,9 @@
 This node implements approach only. It does not contain a search state and it
 does not fuse radar and camera measurements into one estimator. Radar provides
 the target motion estimate; the camera is used only as the final handover
-confirmation and by the existing IBVS controller after handover.
+confirmation and by the existing IBVS controller after handover. An optional,
+default-off single-axis servo-assistance path may also point the camera from
+the radar prediction before visual acquisition.
 
 ## Radar prediction
 
@@ -58,12 +60,38 @@ The forward speed supplied to IBVS is:
 V_forward = clamp(|v_target,xy| + closing_margin, V_min, V_max)
 ```
 
+## Optional radar-assisted camera pitch
+
+`enable_radar_approach_servo` is `false` by default. When explicitly enabled,
+`radar_approach_handover` becomes the sole publisher of the final camera-pitch
+angle. Before visual acquisition it transforms the predicted radar LOS from
+world ENU into aircraft body coordinates, subtracts the measured camera body
+offset, projects the LOS onto the plane perpendicular to the physical hinge,
+and computes the relative command from the neutral optical axis:
+
+```text
+e_radar = atan2(a_servo dot (l_target x l_neutral),
+                l_target dot l_neutral)
+theta_servo = clamp(e_radar, theta_min, theta_max)
+```
+
+Aircraft roll/pitch/yaw, fixed camera mount roll/pitch/yaw, camera position and
+the configured hinge direction are included. The command is rate limited.
+Once a fresh detection has `score > 0.5`, the timestamp-aligned visual
+controller's servo candidate takes over. After handover the visual candidate
+remains the servo source. The arbiter republishes its open-loop commanded angle
+as a feedback estimate so visual LOS reconstruction uses the same camera angle.
+This is not physical position feedback.
+
+The integrated launch starts the PWM mapper/adapter only when this feature is
+explicitly enabled, and both hardware safety gates still start OFF.
+
 ## Handover and command ownership
 
 Handover is latched only when all conditions are true:
 
 - radar estimate is initialized and fresh;
-- estimated target range is within the configured 18--38 m safety window;
+- estimated target range is within the configured 10--30 m safety window;
 - aircraft is within the configured terminal-position tolerance;
 - yaw error is within the configured tolerance;
 - commanded yaw rate and estimated closing speed are below their handover
@@ -87,3 +115,5 @@ never receives two competing command streams.
 - `/radar_approach/estimated_target_velocity`
 - `/radar_approach/state`
 - `/radar_approach/handover_complete`
+- `/radar_approach/servo_source` (`RADAR_PREDICTION`, `VISUAL_ALIGN`,
+  `VISUAL_HANDOVER`, or `RETURN_NEUTRAL`, only when enabled)

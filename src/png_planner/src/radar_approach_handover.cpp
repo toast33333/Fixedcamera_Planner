@@ -29,6 +29,10 @@ double degToRad(double degrees) {
     return degrees * kPi / 180.0;
 }
 
+double radToDeg(double radians) {
+    return radians * 180.0 / kPi;
+}
+
 double wrapAngle(double angle) {
     while (angle > kPi) angle -= 2.0 * kPi;
     while (angle < -kPi) angle += 2.0 * kPi;
@@ -73,6 +77,11 @@ public:
                  handover_stable_duration_sec_);
         ROS_INFO("[RadarApproach] Command ownership: this node alone publishes %s.",
                  final_command_topic_.c_str());
+        ROS_INFO("[RadarApproach] Camera-pitch servo assistance: %s. "
+                 "When enabled, radar prediction acquires the target and "
+                 "score > %.2f visual candidates take over alignment.",
+                 enable_radar_approach_servo_ ? "enabled" : "disabled",
+                 radar_servo_visual_min_score_);
     }
 
 private:
@@ -149,6 +158,7 @@ private:
         nh.param("max_radar_innovation_m", max_radar_innovation_m_, 80.0);
 
         nh.param("terminal_camera_range_m", terminal_camera_range_m_, 20.0);
+        nh.param("camera_mount_roll_deg", camera_mount_roll_deg_, 0.0);
         nh.param("camera_mount_pitch_deg", camera_mount_pitch_deg_, -20.0);
         double camera_mount_upward_angle_deg = 0.0;
         if (nh.getParam("camera_mount_upward_angle_deg",
@@ -159,6 +169,46 @@ private:
         nh.param("camera_offset_body_x_m", camera_offset_body_x_m_, 0.0);
         nh.param("camera_offset_body_y_m", camera_offset_body_y_m_, 0.0);
         nh.param("camera_offset_body_z_m", camera_offset_body_z_m_, 0.0);
+
+        // Optional single-axis camera assistance during radar approach.  The
+        // feature is off by default.  When enabled this node is the sole owner
+        // of the final servo command: radar provides the acquisition angle,
+        // then the visual controller's candidate angle is forwarded after a
+        // qualified detection and throughout the post-handover phase.
+        nh.param("enable_radar_approach_servo",
+                 enable_radar_approach_servo_, false);
+        nh.param<std::string>("radar_servo_visual_candidate_topic",
+                              radar_servo_visual_candidate_topic_,
+                              "/fixed_camera_ibvs/camera_pitch_servo_candidate_deg");
+        nh.param<std::string>("radar_servo_command_topic",
+                              radar_servo_command_topic_,
+                              "/camera_pitch_servo/command_deg");
+        nh.param<std::string>("radar_servo_feedback_topic",
+                              radar_servo_feedback_topic_,
+                              "/camera_pitch_servo/feedback_deg");
+        nh.param<std::string>("radar_servo_source_topic",
+                              radar_servo_source_topic_,
+                              "/radar_approach/servo_source");
+        nh.param("radar_servo_visual_min_score",
+                 radar_servo_visual_min_score_, 0.50);
+        nh.param("radar_servo_visual_candidate_timeout_sec",
+                 radar_servo_visual_candidate_timeout_sec_, 0.30);
+        nh.param("camera_pitch_servo_neutral_deg",
+                 radar_servo_neutral_deg_, 0.0);
+        nh.param("camera_pitch_servo_min_deg",
+                 radar_servo_min_deg_, -25.0);
+        nh.param("camera_pitch_servo_max_deg",
+                 radar_servo_max_deg_, 25.0);
+        nh.param("camera_pitch_servo_max_rate_degps",
+                 radar_servo_max_rate_degps_, 60.0);
+        nh.param("camera_pitch_servo_return_rate_degps",
+                 radar_servo_return_rate_degps_, 20.0);
+        nh.param("camera_pitch_servo_axis_mount_x",
+                 radar_servo_axis_mount_x_, 0.0);
+        nh.param("camera_pitch_servo_axis_mount_y",
+                 radar_servo_axis_mount_y_, 1.0);
+        nh.param("camera_pitch_servo_axis_mount_z",
+                 radar_servo_axis_mount_z_, 0.0);
         nh.param("enforce_minimum_handover_altitude",
                  enforce_minimum_handover_altitude_, false);
         nh.param("minimum_handover_altitude_m",
@@ -351,6 +401,33 @@ private:
             std::max(handover_blend_duration_sec_, 0.0);
         required_centered_detections_ = std::max(required_centered_detections_, 1);
         control_rate_hz_ = std::max(control_rate_hz_, 1.0);
+        radar_servo_visual_min_score_ = clampValue(
+            radar_servo_visual_min_score_, 0.0, 1.0);
+        radar_servo_visual_candidate_timeout_sec_ = std::max(
+            radar_servo_visual_candidate_timeout_sec_, 0.02);
+        if (radar_servo_min_deg_ > radar_servo_max_deg_) {
+            std::swap(radar_servo_min_deg_, radar_servo_max_deg_);
+        }
+        radar_servo_neutral_deg_ = clampValue(
+            radar_servo_neutral_deg_,
+            radar_servo_min_deg_, radar_servo_max_deg_);
+        radar_servo_max_rate_degps_ =
+            std::max(radar_servo_max_rate_degps_, 0.0);
+        radar_servo_return_rate_degps_ =
+            std::max(radar_servo_return_rate_degps_, 0.0);
+        tf::Vector3 servo_axis(
+            radar_servo_axis_mount_x_,
+            radar_servo_axis_mount_y_,
+            radar_servo_axis_mount_z_);
+        if (servo_axis.length2() < 1e-12) {
+            ROS_WARN("[RadarApproach] Servo hinge axis is zero; using +y.");
+            servo_axis = tf::Vector3(0.0, 1.0, 0.0);
+        }
+        servo_axis.normalize();
+        radar_servo_axis_mount_x_ = servo_axis.x();
+        radar_servo_axis_mount_y_ = servo_axis.y();
+        radar_servo_axis_mount_z_ = servo_axis.z();
+        radar_servo_command_deg_ = radar_servo_neutral_deg_;
     }
 
     void configureRos(ros::NodeHandle& nh) {
@@ -381,6 +458,12 @@ private:
         ibvs_candidate_sub_ = nh.subscribe(
             ibvs_candidate_topic_, 5,
             &RadarApproachHandover::ibvsCandidateCallback, this);
+        if (enable_radar_approach_servo_) {
+            radar_servo_visual_candidate_sub_ = nh.subscribe(
+                radar_servo_visual_candidate_topic_, 5,
+                &RadarApproachHandover::radarServoVisualCandidateCallback,
+                this);
+        }
 
         final_command_pub_ =
             nh.advertise<geometry_msgs::TwistStamped>(final_command_topic_, 1);
@@ -396,6 +479,17 @@ private:
             "/radar_approach/state", 1, true);
         handover_pub_ = nh.advertise<std_msgs::Bool>(
             "/radar_approach/handover_complete", 1, true);
+        if (enable_radar_approach_servo_) {
+            radar_servo_command_pub_ = nh.advertise<std_msgs::Float64>(
+                radar_servo_command_topic_, 1, true);
+            // This is an open-loop estimate of the commanded angle, not a
+            // position-sensor measurement.  It keeps the timestamp-aligned
+            // visual controller consistent with the radar-pointed camera.
+            radar_servo_feedback_pub_ = nh.advertise<std_msgs::Float64>(
+                radar_servo_feedback_topic_, 1, true);
+            radar_servo_source_pub_ = nh.advertise<std_msgs::String>(
+                radar_servo_source_topic_, 1, true);
+        }
     }
 
     void selfPoseCallback(const geometry_msgs::PoseStamped::ConstPtr& message) {
@@ -851,6 +945,7 @@ private:
         const bool detection_stream_continuous = detection_time_.isZero() ||
             (now - detection_time_).toSec() <= detection_timeout_sec_;
         detection_time_ = now;
+        last_detection_score_ = static_cast<double>(message.score);
         detection_valid_ =
             message.is_tracking && message.score >= minimum_detection_score_;
         if (!detection_valid_) {
@@ -909,6 +1004,143 @@ private:
         ibvs_candidate_ = *message;
         ibvs_candidate_time_ = ros::Time::now();
         have_ibvs_candidate_ = true;
+    }
+
+    void radarServoVisualCandidateCallback(
+        const std_msgs::Float64::ConstPtr& message) {
+        if (!std::isfinite(message->data)) return;
+        radar_servo_visual_candidate_deg_ = clampValue(
+            message->data, radar_servo_min_deg_, radar_servo_max_deg_);
+        radar_servo_visual_candidate_time_ = ros::Time::now();
+        have_radar_servo_visual_candidate_ = true;
+    }
+
+    double radarPredictedServoCommandDeg(
+        const geometry_msgs::Point& target) const {
+        tf::Quaternion body_attitude(
+            self_pose_.pose.orientation.x,
+            self_pose_.pose.orientation.y,
+            self_pose_.pose.orientation.z,
+            self_pose_.pose.orientation.w);
+        if (body_attitude.length2() < 1e-12) {
+            return radar_servo_neutral_deg_;
+        }
+        body_attitude.normalize();
+        const tf::Matrix3x3 world_from_body(body_attitude);
+        const tf::Vector3 target_from_reference_world(
+            target.x - self_pose_.pose.position.x,
+            target.y - self_pose_.pose.position.y,
+            target.z - self_pose_.pose.position.z);
+        const tf::Vector3 camera_offset_body(
+            camera_offset_body_x_m_,
+            camera_offset_body_y_m_,
+            camera_offset_body_z_m_);
+        tf::Vector3 target_from_camera_body =
+            world_from_body.transpose() * target_from_reference_world -
+            camera_offset_body;
+        if (target_from_camera_body.length2() < 1e-12) {
+            return radar_servo_neutral_deg_;
+        }
+        target_from_camera_body.normalize();
+
+        tf::Matrix3x3 fixed_mount_rotation;
+        fixed_mount_rotation.setRPY(
+            degToRad(camera_mount_roll_deg_),
+            degToRad(camera_mount_pitch_deg_),
+            degToRad(camera_mount_yaw_deg_));
+        tf::Vector3 neutral_optical_axis_body =
+            fixed_mount_rotation * tf::Vector3(1.0, 0.0, 0.0);
+        tf::Vector3 servo_axis_body = fixed_mount_rotation * tf::Vector3(
+            radar_servo_axis_mount_x_,
+            radar_servo_axis_mount_y_,
+            radar_servo_axis_mount_z_);
+        if (servo_axis_body.length2() < 1e-12) {
+            return radar_servo_neutral_deg_;
+        }
+        servo_axis_body.normalize();
+
+        // A single-axis servo can correct only the projection perpendicular
+        // to its hinge.  The sign matches fixed_camera_ibvs: positive command
+        // raises the optical axis.  Roll, pitch, yaw, camera mount geometry,
+        // offset and non-ideal hinge direction are all included.
+        tf::Vector3 target_projected = target_from_camera_body -
+            servo_axis_body * target_from_camera_body.dot(servo_axis_body);
+        tf::Vector3 neutral_projected = neutral_optical_axis_body -
+            servo_axis_body * neutral_optical_axis_body.dot(servo_axis_body);
+        if (target_projected.length2() < 1e-12 ||
+            neutral_projected.length2() < 1e-12) {
+            return radar_servo_neutral_deg_;
+        }
+        target_projected.normalize();
+        neutral_projected.normalize();
+        const double sine = servo_axis_body.dot(
+            target_projected.cross(neutral_projected));
+        const double cosine = clampValue(
+            target_projected.dot(neutral_projected), -1.0, 1.0);
+        return clampValue(
+            radToDeg(std::atan2(sine, cosine)),
+            radar_servo_min_deg_, radar_servo_max_deg_);
+    }
+
+    void publishRadarApproachServo(
+        const ros::Time& now,
+        const geometry_msgs::Point* radar_target) {
+        if (!enable_radar_approach_servo_) return;
+
+        const bool visual_candidate_fresh =
+            have_radar_servo_visual_candidate_ &&
+            (now - radar_servo_visual_candidate_time_).toSec() <=
+                radar_servo_visual_candidate_timeout_sec_;
+        const bool visual_detection_qualified = detection_valid_ &&
+            (now - detection_time_).toSec() <= detection_timeout_sec_ &&
+            last_detection_score_ > radar_servo_visual_min_score_;
+
+        double requested_deg = radar_servo_neutral_deg_;
+        double rate_limit_degps = radar_servo_return_rate_degps_;
+        std::string source = "RETURN_NEUTRAL";
+        if (handover_complete_ && visual_candidate_fresh) {
+            requested_deg = radar_servo_visual_candidate_deg_;
+            rate_limit_degps = radar_servo_max_rate_degps_;
+            source = "VISUAL_HANDOVER";
+        } else if (!handover_complete_ && visual_detection_qualified &&
+                   visual_candidate_fresh) {
+            requested_deg = radar_servo_visual_candidate_deg_;
+            rate_limit_degps = radar_servo_max_rate_degps_;
+            source = "VISUAL_ALIGN";
+        } else if (!handover_complete_ && radar_target != nullptr) {
+            requested_deg = radarPredictedServoCommandDeg(*radar_target);
+            rate_limit_degps = radar_servo_max_rate_degps_;
+            source = "RADAR_PREDICTION";
+        }
+
+        double dt = 1.0 / control_rate_hz_;
+        if (radar_servo_command_initialized_) {
+            dt = clampValue(
+                (now - radar_servo_command_time_).toSec(), 0.0, 0.20);
+        }
+        const double maximum_step = rate_limit_degps * dt;
+        radar_servo_command_deg_ += clampValue(
+            requested_deg - radar_servo_command_deg_,
+            -maximum_step, maximum_step);
+        radar_servo_command_deg_ = clampValue(
+            radar_servo_command_deg_,
+            radar_servo_min_deg_, radar_servo_max_deg_);
+        radar_servo_command_time_ = now;
+        radar_servo_command_initialized_ = true;
+
+        std_msgs::Float64 command;
+        command.data = radar_servo_command_deg_;
+        radar_servo_command_pub_.publish(command);
+        radar_servo_feedback_pub_.publish(command);
+
+        if (source != radar_servo_last_source_) {
+            radar_servo_last_source_ = source;
+            std_msgs::String source_message;
+            source_message.data = source;
+            radar_servo_source_pub_.publish(source_message);
+            ROS_INFO("[RadarApproach] Servo source -> %s, command %.1f deg.",
+                     source.c_str(), radar_servo_command_deg_);
+        }
     }
 
     geometry_msgs::Point predictedTargetAt(const ros::Time& time) const {
@@ -1240,6 +1472,7 @@ private:
             setState(State::WAIT_RADAR);
             publishHandoverFlag(false);
             resetApproachCommandLimiter(now);
+            publishRadarApproachServo(now, nullptr);
             final_command_pub_.publish(zeroCommand(now));
             return;
         }
@@ -1249,6 +1482,7 @@ private:
                 setState(State::WAIT_RADAR);
                 publishHandoverFlag(false);
                 resetApproachCommandLimiter(now);
+                publishRadarApproachServo(now, nullptr);
                 final_command_pub_.publish(zeroCommand(now));
                 return;
             }
@@ -1257,6 +1491,7 @@ private:
                 setState(State::RADAR_TIMEOUT);
                 publishHandoverFlag(false);
                 resetApproachCommandLimiter(now);
+                publishRadarApproachServo(now, nullptr);
                 final_command_pub_.publish(zeroCommand(now));
                 return;
             }
@@ -1372,11 +1607,13 @@ private:
                          centered_detection_count_);
             } else {
                 publishHandoverFlag(false);
+                publishRadarApproachServo(now, &target_now);
                 final_command_pub_.publish(approach_command);
                 return;
             }
         }
 
+        publishRadarApproachServo(now, nullptr);
         publishHandoverFlag(true);
         const bool ibvs_candidate_fresh = have_ibvs_candidate_ &&
             (now - ibvs_candidate_time_).toSec() <= ibvs_candidate_timeout_sec_;
@@ -1404,6 +1641,10 @@ private:
     std::string ibvs_candidate_topic_;
     std::string final_command_topic_;
     std::string forward_speed_topic_;
+    std::string radar_servo_visual_candidate_topic_;
+    std::string radar_servo_command_topic_;
+    std::string radar_servo_feedback_topic_;
+    std::string radar_servo_source_topic_;
 
     int detection_mode_ = 1;
     double minimum_detection_score_ = 0.0;
@@ -1417,6 +1658,26 @@ private:
     double center_tolerance_v_px_ = 40.0;
     double detection_timeout_sec_ = 0.30;
     int required_centered_detections_ = 5;
+    double last_detection_score_ = 0.0;
+
+    bool enable_radar_approach_servo_ = false;
+    double radar_servo_visual_min_score_ = 0.50;
+    double radar_servo_visual_candidate_timeout_sec_ = 0.30;
+    double radar_servo_neutral_deg_ = 0.0;
+    double radar_servo_min_deg_ = -25.0;
+    double radar_servo_max_deg_ = 25.0;
+    double radar_servo_max_rate_degps_ = 60.0;
+    double radar_servo_return_rate_degps_ = 20.0;
+    double radar_servo_axis_mount_x_ = 0.0;
+    double radar_servo_axis_mount_y_ = 1.0;
+    double radar_servo_axis_mount_z_ = 0.0;
+    double radar_servo_visual_candidate_deg_ = 0.0;
+    double radar_servo_command_deg_ = 0.0;
+    ros::Time radar_servo_visual_candidate_time_;
+    ros::Time radar_servo_command_time_;
+    bool have_radar_servo_visual_candidate_ = false;
+    bool radar_servo_command_initialized_ = false;
+    std::string radar_servo_last_source_;
 
     double expected_radar_period_sec_ = 3.0;
     double radar_timeout_sec_ = 7.0;
@@ -1434,6 +1695,7 @@ private:
     double max_target_vertical_speed_mps_ = -1.0;
     double max_radar_innovation_m_ = 80.0;
     double terminal_camera_range_m_ = 20.0;
+    double camera_mount_roll_deg_ = 0.0;
     double camera_mount_pitch_deg_ = -20.0;
     double camera_mount_yaw_deg_ = 0.0;
     double camera_offset_body_x_m_ = 0.0;
@@ -1541,6 +1803,7 @@ private:
     ros::Subscriber detection_sub_kcf_;
     ros::Subscriber detection_sub_detection_;
     ros::Subscriber ibvs_candidate_sub_;
+    ros::Subscriber radar_servo_visual_candidate_sub_;
     ros::Publisher final_command_pub_;
     ros::Publisher forward_speed_pub_;
     ros::Publisher predicted_target_pub_;
@@ -1548,6 +1811,9 @@ private:
     ros::Publisher target_velocity_pub_;
     ros::Publisher state_pub_;
     ros::Publisher handover_pub_;
+    ros::Publisher radar_servo_command_pub_;
+    ros::Publisher radar_servo_feedback_pub_;
+    ros::Publisher radar_servo_source_pub_;
     ros::Timer control_timer_;
 };
 

@@ -138,6 +138,35 @@ def visual_stabilization_blend(target_range, tilt_deg,
     return max(range_blend, attitude_blend)
 
 
+def radar_servo_pitch_command(target_elevation_deg,
+                              neutral_elevation_deg,
+                              minimum_deg=-25.0,
+                              maximum_deg=25.0):
+    target = math.radians(target_elevation_deg)
+    neutral = math.radians(neutral_elevation_deg)
+    target_axis = (math.cos(target), 0.0, math.sin(target))
+    neutral_axis = (math.cos(neutral), 0.0, math.sin(neutral))
+    # +y hinge: a dot (target x neutral), matching the C++ sign convention.
+    sine = (target_axis[2] * neutral_axis[0]
+            - target_axis[0] * neutral_axis[2])
+    cosine = sum(target_axis[i] * neutral_axis[i] for i in range(3))
+    command = math.degrees(math.atan2(sine, cosine))
+    return max(minimum_deg, min(command, maximum_deg))
+
+
+def radar_servo_source(handover_complete, visual_candidate_fresh,
+                       detection_fresh, detection_score,
+                       radar_target_available, score_threshold=0.5):
+    if handover_complete and visual_candidate_fresh:
+        return "VISUAL_HANDOVER"
+    if (not handover_complete and visual_candidate_fresh
+            and detection_fresh and detection_score > score_threshold):
+        return "VISUAL_ALIGN"
+    if not handover_complete and radar_target_available:
+        return "RADAR_PREDICTION"
+    return "RETURN_NEUTRAL"
+
+
 class RadarApproachMathTest(unittest.TestCase):
     def test_twenty_meter_terminal_geometry_centers_upward_camera(self):
         target = (100.0, 20.0, 30.0)
@@ -270,6 +299,26 @@ class RadarApproachMathTest(unittest.TestCase):
         self.assertAlmostEqual(visual_stabilization_blend(34.0, 11.5), 0.5)
         self.assertEqual(visual_stabilization_blend(30.0, 5.0), 1.0)
         self.assertEqual(visual_stabilization_blend(34.0, 15.0), 1.0)
+
+    def test_radar_servo_points_relative_to_neutral_camera_axis(self):
+        self.assertAlmostEqual(radar_servo_pitch_command(20.0, 20.0), 0.0)
+        self.assertAlmostEqual(radar_servo_pitch_command(30.0, 20.0), 10.0)
+        self.assertAlmostEqual(radar_servo_pitch_command(5.0, 20.0), -15.0)
+        self.assertEqual(radar_servo_pitch_command(70.0, 20.0), 25.0)
+
+    def test_radar_servo_uses_strict_visual_score_gate_and_latched_handover(self):
+        self.assertEqual(
+            radar_servo_source(False, True, True, 0.50, True),
+            "RADAR_PREDICTION")
+        self.assertEqual(
+            radar_servo_source(False, True, True, 0.51, True),
+            "VISUAL_ALIGN")
+        self.assertEqual(
+            radar_servo_source(True, True, False, 0.0, False),
+            "VISUAL_HANDOVER")
+        self.assertEqual(
+            radar_servo_source(True, False, False, 0.0, False),
+            "RETURN_NEUTRAL")
 
     def test_twenty_five_meter_terminal_geometry_preserves_slant_range(self):
         target = (80.0, -12.0, 9.0)

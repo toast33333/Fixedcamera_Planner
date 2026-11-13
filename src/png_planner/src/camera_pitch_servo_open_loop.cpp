@@ -39,13 +39,26 @@ class CameraPitchServoOpenLoop {
                             command_valid_topic_,
                             "/camera_pitch_servo/command_valid");
     pnh_.param("camera_pitch_servo_neutral_deg", neutral_deg_, 0.0);
-    pnh_.param("camera_pitch_servo_min_deg", command_min_deg_, -25.0);
-    pnh_.param("camera_pitch_servo_max_deg", command_max_deg_, 25.0);
-    pnh_.param("camera_pitch_servo_physical_half_travel_deg",
-                physical_half_travel_deg_, 90.0);
-    pnh_.param("camera_pitch_servo_pwm_min_us", pwm_min_us_, 500);
+    // Keep the mapper calibration range separate from the visual controller's
+    // normal operating limits. This allows bench calibration over the verified
+    // servo range without widening the in-flight controller range.
+    pnh_.param("camera_pitch_servo_mapper_min_deg", command_min_deg_, -48.0);
+    pnh_.param("camera_pitch_servo_mapper_max_deg", command_max_deg_, 48.0);
+    pnh_.param<std::string>("camera_pitch_servo_calibration_mode",
+                            calibration_mode_, "measured");
+    // Keep the old single-gain parameter as a fallback so an older field YAML
+    // retains the measured relationship after this binary is updated.
+    double legacy_pwm_us_per_deg = 10.132249;
+    pnh_.param("camera_pitch_servo_pwm_us_per_deg",
+               legacy_pwm_us_per_deg, 10.132249);
+    pnh_.param("camera_pitch_servo_measured_pwm_us_per_deg",
+               measured_pwm_us_per_deg_, legacy_pwm_us_per_deg);
+    pnh_.param("camera_pitch_servo_datasheet_pwm_us_per_deg",
+               datasheet_pwm_us_per_deg_, 500.0 / 45.0);
+    selectCalibration();
+    pnh_.param("camera_pitch_servo_pwm_min_us", pwm_min_us_, 1000);
     pnh_.param("camera_pitch_servo_pwm_neutral_us", pwm_neutral_us_, 1500);
-    pnh_.param("camera_pitch_servo_pwm_max_us", pwm_max_us_, 2500);
+    pnh_.param("camera_pitch_servo_pwm_max_us", pwm_max_us_, 2000);
     pnh_.param("camera_pitch_servo_pwm_period_us", pwm_period_us_, 20000);
     pnh_.param("camera_pitch_servo_pwm_reverse", pwm_reverse_, false);
     pnh_.param("camera_pitch_servo_driver_rate_hz", update_rate_hz_, 50.0);
@@ -78,9 +91,12 @@ class CameraPitchServoOpenLoop {
 
     publishState(ros::Time::now());
     ROS_INFO("Camera pitch open-loop mapper: command=%s pwm=%s, limits=[%.1f, %.1f] deg, "
+             "calibration=%s gain=%.6f us/deg (measured=%.6f datasheet=%.6f) "
              "pulse=[%d, %d, %d] us period=%d us reverse=%s",
              command_topic_.c_str(), pwm_topic_.c_str(), command_min_deg_,
-             command_max_deg_, pwm_min_us_, pwm_neutral_us_, pwm_max_us_,
+             command_max_deg_, calibration_mode_.c_str(), pwm_us_per_deg_,
+             measured_pwm_us_per_deg_, datasheet_pwm_us_per_deg_,
+             pwm_min_us_, pwm_neutral_us_, pwm_max_us_,
              pwm_period_us_, pwm_reverse_ ? "true" : "false");
     if (output_enabled_) {
       ROS_WARN("Camera pitch PWM output is armed by configuration, but no pulse "
@@ -92,15 +108,32 @@ class CameraPitchServoOpenLoop {
   }
 
  private:
+  void selectCalibration() {
+    if (calibration_mode_ == "measured") {
+      pwm_us_per_deg_ = measured_pwm_us_per_deg_;
+      return;
+    }
+    if (calibration_mode_ == "datasheet") {
+      pwm_us_per_deg_ = datasheet_pwm_us_per_deg_;
+      return;
+    }
+    throw std::runtime_error(
+        "camera_pitch_servo_calibration_mode must be 'measured' or 'datasheet'");
+  }
+
   void validateParameters() {
     if (!std::isfinite(neutral_deg_) || !std::isfinite(command_min_deg_) ||
         !std::isfinite(command_max_deg_) || command_min_deg_ >= command_max_deg_ ||
         neutral_deg_ < command_min_deg_ || neutral_deg_ > command_max_deg_) {
       throw std::runtime_error("invalid camera pitch command angle limits");
     }
-    if (!std::isfinite(physical_half_travel_deg_) ||
-        physical_half_travel_deg_ <= 0.0) {
-      throw std::runtime_error("camera_pitch_servo_physical_half_travel_deg must be positive");
+    if (!std::isfinite(measured_pwm_us_per_deg_) ||
+        measured_pwm_us_per_deg_ <= 0.0 ||
+        !std::isfinite(datasheet_pwm_us_per_deg_) ||
+        datasheet_pwm_us_per_deg_ <= 0.0 ||
+        !std::isfinite(pwm_us_per_deg_) || pwm_us_per_deg_ <= 0.0) {
+      throw std::runtime_error(
+          "camera pitch servo calibration gains must be positive");
     }
     if (pwm_min_us_ <= 0 || pwm_min_us_ >= pwm_neutral_us_ ||
         pwm_neutral_us_ >= pwm_max_us_ || pwm_max_us_ >= pwm_period_us_) {
@@ -164,19 +197,9 @@ class CameraPitchServoOpenLoop {
   uint16_t angleToPulse(double command_deg) const {
     double relative_deg = command_deg - neutral_deg_;
     if (pwm_reverse_) relative_deg = -relative_deg;
-    relative_deg = clampValue(relative_deg, -physical_half_travel_deg_,
-                              physical_half_travel_deg_);
-
-    double pulse = pwm_neutral_us_;
-    if (relative_deg >= 0.0) {
-      pulse += relative_deg / physical_half_travel_deg_ *
-               static_cast<double>(pwm_max_us_ - pwm_neutral_us_);
-    } else {
-      pulse += relative_deg / physical_half_travel_deg_ *
-               static_cast<double>(pwm_neutral_us_ - pwm_min_us_);
-    }
-    pulse = clampValue(pulse, static_cast<double>(pwm_min_us_),
-                       static_cast<double>(pwm_max_us_));
+    const double pulse = clampValue(
+        static_cast<double>(pwm_neutral_us_) + pwm_us_per_deg_ * relative_deg,
+        static_cast<double>(pwm_min_us_), static_cast<double>(pwm_max_us_));
     return static_cast<uint16_t>(std::lround(pulse));
   }
 
@@ -255,12 +278,15 @@ class CameraPitchServoOpenLoop {
   std::string output_enabled_topic_;
   std::string command_valid_topic_;
   double neutral_deg_{0.0};
-  double command_min_deg_{-25.0};
-  double command_max_deg_{25.0};
-  double physical_half_travel_deg_{90.0};
-  int pwm_min_us_{500};
+  double command_min_deg_{-48.0};
+  double command_max_deg_{48.0};
+  std::string calibration_mode_{"measured"};
+  double measured_pwm_us_per_deg_{10.132249};
+  double datasheet_pwm_us_per_deg_{500.0 / 45.0};
+  double pwm_us_per_deg_{10.132249};
+  int pwm_min_us_{1000};
   int pwm_neutral_us_{1500};
-  int pwm_max_us_{2500};
+  int pwm_max_us_{2000};
   int pwm_period_us_{20000};
   bool pwm_reverse_{false};
   double update_rate_hz_{50.0};

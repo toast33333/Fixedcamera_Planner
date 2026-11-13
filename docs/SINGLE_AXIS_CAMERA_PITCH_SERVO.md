@@ -31,8 +31,12 @@ roslaunch png_planner camera_pitch_servo_open_loop.launch
 ```
 
 它把角度指令限速后换算为 `/camera_pitch_servo/pulse_width_us`
-（`std_msgs/UInt16`）。按S001M规格书默认使用50 Hz、500/1500/2500 us和
-180度行程。该节点本身不访问RK3576的PWM寄存器或`pwmchip`。
+（`std_msgs/UInt16`）。默认使用50 Hz，并以1500 us严格对应机械中位0度。
+`camera_pitch_servo_calibration_mode`可选择两套角度到脉宽关系：`measured`使用实物
+标定`P = 1500 + 10.132249 * theta`，`datasheet`使用规格书500 us对应45度的
+`P = 1500 + 11.111111 * theta`。默认仍为`measured`。随后把角度限制在-48度到
++48度、把脉宽限制在1000 us到2000 us。
+该节点本身不访问RK3576的PWM寄存器或`pwmchip`。
 
 为避免节点启动或驱动晚启动时产生意外动作，当前开环层采用两级安全门：
 
@@ -113,6 +117,11 @@ PWM通道：0
 硬件层还带有独立的PWM消息看门狗，默认超时为0.3秒。硬件输出已经激活后，
 如果换算节点退出或PWM消息流中断，硬件层会自动撤销武装、关闭并释放该通道。
 
+RK3576的Rockchip PWM通道每次重新export后采用完整初始化顺序：先关闭输出并把
+`duty_cycle`清零，再设置周期和`normal`极性，随后写入目标脉宽并使能。节点还会
+回读`enable/period/polarity/duty_cycle`；任一状态不匹配时立即关闭并释放通道。
+这是为了避免sysfs数值看似正确、物理引脚却没有恢复有效波形的情况。
+
 ### 角度反馈（可选）
 
 - 话题：`/camera_pitch_servo/feedback_deg`
@@ -133,7 +142,17 @@ PWM通道：0
 
 ## 3. 控制公式
 
-令图像中心偏差的正方向为向上，当前目标和期望目标的竖直角误差为
+控制器先使用检测时间戳对应的IMU姿态和舵机角把视觉LOS变换到世界系，再用
+当前飞机姿态和当前舵机角得到当前机体系LOS。随后把当前LOS与期望LOS都投影到
+实际舵机铰链轴的法平面，计算绕该轴可实现的有符号角误差：
+
+```text
+e_axis = atan2(a · (l_perp × d_perp), l_perp · d_perp)
+```
+
+其中`a`是机体系中的实际舵机转轴，`l_perp`和`d_perp`分别是当前LOS和期望LOS
+在转轴法平面上的投影。这样飞机滚转、俯仰、偏航，以及相机固定安装角和转轴
+安装偏差都会进入舵机控制方向。关闭转轴补偿时，才退回原来的图像竖直角误差：
 
 ```text
 e = atan2(v, fy) - atan2(v_des, fy)
@@ -172,13 +191,19 @@ camera_mount_pitch = fixed_mount_pitch - theta_servo
 - `camera_pitch_servo_max_rate_degps`：控制器允许的最大转速。
 - `camera_pitch_servo_return_on_loss`：丢失目标后是否回中。
 - `camera_pitch_servo_return_rate_degps`：回中速度。
+- `camera_pitch_servo_axis_compensation_enabled`：是否使用三维LOS到实际转轴的投影误差。
+- `camera_pitch_servo_axis_mount_x/y/z`：中立安装坐标系中的物理铰链轴方向，默认`[0,1,0]`。
 - `camera_pitch_servo_pwm_min_us/neutral_us/max_us`：S001M脉宽标定值。
+- `camera_pitch_servo_calibration_mode`：选择`measured`实测标定或`datasheet`规格书标定。
+- `camera_pitch_servo_measured_pwm_us_per_deg`：实测标定斜率，当前为10.132249 us/deg。
+- `camera_pitch_servo_datasheet_pwm_us_per_deg`：规格书斜率，当前为500/45 us/deg。
 - `camera_pitch_servo_output_enabled`：启动时输出安全门，实机保持 `false`。
 - `camera_pitch_servo_enable_service`：运行中显式打开/关闭输出的 `SetBool` 服务。
 - `camera_pitch_servo_pwm_reverse`：舵机机械安装方向反相。
 - `camera_pitch_servo_driver_max_rate_degps`：开环PWM层的二次安全限速。
 - `camera_pitch_servo_command_timeout_sec`：角度指令超时回中时间。
 - `camera_pitch_servo_pwm_of_fullname`：GPIO0_B4_D对应的PWM控制器OF路径。
+- `camera_pitch_servo_pwm_polarity`：舵机PWM的电气极性，当前固定为`normal`。
 - `camera_pitch_servo_pwm_channel`：控制器内通道，本连接固定为0。
 - `camera_pitch_servo_hardware_command_timeout_sec`：PWM消息中断后的硬件关闭超时。
 - `camera_pitch_servo_hardware_enable_service`：硬件层独立安全门服务。

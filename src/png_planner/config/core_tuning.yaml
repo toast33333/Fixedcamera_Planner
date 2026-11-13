@@ -15,6 +15,15 @@ k_z_ff: 1.5
 N_nav_z: 2.0
 vertical_integrator_decay: 0.98
 
+# Visual/IMU time alignment emergency switch.
+# true  : use Detection.header.stamp captured before asynchronous inference.
+# false : ignore the header stamp and assume the image was captured
+#         image_delay_sec before the detection reached the controller.
+# Keep true normally.  Change only this boolean to false for the field
+# fallback; image_delay_sec retains the former fixed 0.08 s estimate.
+use_detection_header_stamp: true
+image_delay_sec: 0.08
+
 # ============================================================================
 # 2. Interceptor dynamics and command limits
 #    Horizontal limits are widened for targets moving at 5--15 m/s.  The
@@ -56,14 +65,12 @@ max_radar_innovation_m: 30.0
 # These are estimator plausibility limits, not interceptor command limits.
 max_target_speed_mps: 20.0
 max_target_horizontal_speed_mps: 20.0
-max_target_vertical_speed_mps: 0.0
 
 # Moving-point approach
 terminal_camera_range_m: 25.0
 position_gain_xy: 0.40
 position_gain_z: 0.35
 target_velocity_feedforward_gain_xy: 1.0
-target_velocity_feedforward_gain_z: 0.0
 yaw_gain: 1.2
 use_braking_speed_profile: true
 approach_braking_deceleration_mps2: 2.0
@@ -94,7 +101,11 @@ handover_blend_duration_sec: 2.0
 # ============================================================================
 # 4. Field-of-view retention
 #    The additive guard is zero inside the central 50% image-area region.
+#    It is enabled for all interception test modes, but only a detection with
+#    score strictly greater than 0.5 is allowed to generate a FOV correction.
 # ============================================================================
+enable_fov_guard: true
+fov_guard_min_detection_score: 0.50
 fov_horizontal_limit_deg: 23.94
 fov_vertical_limit_deg: 18.54
 fov_guard_center_area_ratio: 0.50
@@ -118,6 +129,8 @@ fov_emergency_yaw_ratio: 0.85
 #    the field airframe; do not enter the same scalar distance on every axis.
 # ============================================================================
 camera_mount_upward_angle_deg: 20.0
+camera_mount_roll_deg: 0.0
+camera_mount_yaw_deg: 0.0
 camera_offset_body_x_m: 0.0
 camera_offset_body_y_m: 0.0
 camera_offset_body_z_m: 0.0
@@ -129,6 +142,17 @@ camera_offset_body_z_m: 0.0
 #    positive degrees raise the optical axis, negative degrees lower it.
 # ============================================================================
 enable_camera_pitch_servo: false
+# Radar-approach servo assistance is independently prepared but remains OFF.
+# When later enabled through radar_approach_intercept.launch, radar prediction
+# points the camera before visual acquisition; score > 0.5 visual alignment
+# then takes ownership, and the visual candidate remains owner after handover.
+enable_radar_approach_servo: false
+radar_servo_visual_min_score: 0.50
+radar_servo_visual_candidate_timeout_sec: 0.30
+radar_servo_visual_candidate_topic: /fixed_camera_ibvs/camera_pitch_servo_candidate_deg
+radar_servo_command_topic: /camera_pitch_servo/command_deg
+radar_servo_feedback_topic: /camera_pitch_servo/feedback_deg
+radar_servo_source_topic: /radar_approach/servo_source
 camera_pitch_servo_use_feedback: false
 camera_pitch_servo_neutral_deg: 0.0
 camera_pitch_servo_min_deg: -25.0
@@ -144,19 +168,36 @@ camera_pitch_servo_max_rate_degps: 60.0
 camera_pitch_servo_return_on_loss: true
 camera_pitch_servo_return_rate_degps: 20.0
 
-# S001M open-loop angle-to-PWM mapper. These values follow the supplied
-# DS-S001M-0.6P8.5-CL-P datasheet. No RK3576 pin is accessed by this layer.
+# Project the 3-D LOS error onto the physical single-axis hinge instead of
+# assuming that raw image vertical error is always the achievable direction.
+# Axis coordinates use the neutral mount frame after optical-to-body basis
+# conversion: +x forward, +y left, +z up. [0, 1, 0] is a standard pitch hinge.
+camera_pitch_servo_axis_compensation_enabled: true
+camera_pitch_servo_axis_mount_x: 0.0
+camera_pitch_servo_axis_mount_y: 1.0
+camera_pitch_servo_axis_mount_z: 0.0
+
+# S001M open-loop angle-to-PWM mapper. Select one calibration explicitly:
+#   measured  : field calibration, P_us = 1500 + 10.132249 * angle_deg
+#   datasheet : nominal 500 us / 45 deg, P_us = 1500 + 11.111111 * angle_deg
+# New code selects one of the two named gains below. Mapper limits are separate
+# from the visual controller's normal -25..+25 deg operating range.
+# No RK3576 pin is accessed by this layer.
 # The output gate is false by default. Even after it is armed through the
 # SetBool service, the mapper waits for a new angle command before publishing.
 camera_pitch_servo_output_enabled: false
 camera_pitch_servo_enable_service: /camera_pitch_servo/set_output_enabled
 camera_pitch_servo_output_enabled_topic: /camera_pitch_servo/output_enabled
 camera_pitch_servo_command_valid_topic: /camera_pitch_servo/command_valid
-camera_pitch_servo_pwm_min_us: 500
+camera_pitch_servo_pwm_min_us: 1000
 camera_pitch_servo_pwm_neutral_us: 1500
-camera_pitch_servo_pwm_max_us: 2500
+camera_pitch_servo_pwm_max_us: 2000
 camera_pitch_servo_pwm_period_us: 20000
-camera_pitch_servo_physical_half_travel_deg: 90.0
+camera_pitch_servo_mapper_min_deg: -48.0
+camera_pitch_servo_mapper_max_deg: 48.0
+camera_pitch_servo_calibration_mode: measured
+camera_pitch_servo_measured_pwm_us_per_deg: 10.132249
+camera_pitch_servo_datasheet_pwm_us_per_deg: 11.1111111111
 camera_pitch_servo_pwm_reverse: false
 camera_pitch_servo_driver_rate_hz: 50.0
 camera_pitch_servo_driver_max_rate_degps: 60.0
@@ -170,6 +211,7 @@ camera_pitch_servo_return_on_command_timeout: true
 camera_pitch_servo_pwm_of_fullname: /pwm@2add0000
 camera_pitch_servo_pwm_channel: 0
 camera_pitch_servo_pwm_sysfs_root: /sys/class/pwm
+camera_pitch_servo_pwm_polarity: normal
 camera_pitch_servo_hardware_command_timeout_sec: 0.3
 camera_pitch_servo_mapper_output_enabled_topic: /camera_pitch_servo/output_enabled
 camera_pitch_servo_mapper_command_valid_topic: /camera_pitch_servo/command_valid

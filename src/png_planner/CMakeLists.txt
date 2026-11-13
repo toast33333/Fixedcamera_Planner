@@ -367,7 +367,11 @@ add_executable(radar_approach_handover src/radar_approach_handover.cpp)
 add_dependencies(radar_approach_handover ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(radar_approach_handover ${catkin_LIBRARIES} ${GEOGRAPHICLIB_LIBRARY})
 
-install(TARGETS camera_pitch_servo_open_loop camera_pitch_servo_sysfs_pwm
+add_executable(circle_trajectory_test src/circle_trajectory_test.cpp)
+add_dependencies(circle_trajectory_test ${catkin_EXPORTED_TARGETS})
+target_link_libraries(circle_trajectory_test ${catkin_LIBRARIES})
+
+install(TARGETS circle_trajectory_test camera_pitch_servo_open_loop camera_pitch_servo_sysfs_pwm
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

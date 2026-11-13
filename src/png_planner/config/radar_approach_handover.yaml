@@ -61,6 +61,22 @@ camera_mount_yaw_deg: 0.0
 camera_offset_body_x_m: 0.0
 camera_offset_body_y_m: 0.0
 camera_offset_body_z_m: 0.0
+
+# Optional single-axis camera assistance during radar approach. It is prepared
+# but deliberately disabled for the first field image. When enabled, the radar
+# target prediction points the servo before visual acquisition. A fresh visual
+# candidate takes over only when detection score is strictly greater than 0.5;
+# after handover the visual controller remains the servo-command source.
+# The radar node publishes the final servo angle and is therefore the only
+# servo-command owner. The feedback topic below is the open-loop commanded
+# angle estimate used to keep the visual LOS calculation consistent.
+enable_radar_approach_servo: false
+radar_servo_visual_min_score: 0.50
+radar_servo_visual_candidate_timeout_sec: 0.30
+radar_servo_visual_candidate_topic: /fixed_camera_ibvs/camera_pitch_servo_candidate_deg
+radar_servo_command_topic: /camera_pitch_servo/command_deg
+radar_servo_feedback_topic: /camera_pitch_servo/feedback_deg
+radar_servo_source_topic: /radar_approach/servo_source
 minimum_course_speed_mps: 0.5
 course_full_confidence_std_deg: 12.0
 course_zero_confidence_std_deg: 35.0

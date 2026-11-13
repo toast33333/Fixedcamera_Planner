@@ -76,7 +76,35 @@ def vertical_image_angle_deg(target_body_elevation_deg,
             servo_relative_upward_deg)
 
 
+def visual_measurement_time(receipt_time, header_stamp,
+                            use_header_stamp=True, fixed_delay=0.08):
+    """Mirror the controller's selectable visual/IMU alignment policy."""
+    if use_header_stamp:
+        return header_stamp if header_stamp > 0.0 else receipt_time
+    if fixed_delay > 0.0 and receipt_time > fixed_delay:
+        return receipt_time - fixed_delay
+    return receipt_time
+
+
 class FixedCameraMathTest(unittest.TestCase):
+    def test_timestamp_alignment_uses_camera_header_stamp(self):
+        self.assertAlmostEqual(
+            visual_measurement_time(10.20, 10.03, True, 0.08),
+            10.03,
+        )
+
+    def test_fixed_delay_alignment_ignores_camera_header_stamp(self):
+        self.assertAlmostEqual(
+            visual_measurement_time(10.20, 1234.0, False, 0.08),
+            10.12,
+        )
+
+    def test_fixed_delay_alignment_does_not_go_before_zero(self):
+        self.assertAlmostEqual(
+            visual_measurement_time(0.03, 0.01, False, 0.08),
+            0.03,
+        )
+
     def test_optical_center_maps_to_body_forward(self):
         self.assertEqual(camera_to_body((0.0, 0.0, 1.0)), (1.0, 0.0, 0.0))
 

@@ -6,8 +6,13 @@
   <arg name="detection_topic" default="/object_detections" />
   <arg name="enable_horizontal_control" default="true" />
   <arg name="enable_height_control" default="true" />
+  <arg name="enable_camera_pitch_servo" default="false" />
   <arg name="forward_speed_mps" default="5.0" />
   <arg name="lost_forward_speed_mps" default="5.0" />
+
+  <include file="$(find png_planner)/launch/camera_pitch_servo_hardware.launch">
+    <arg name="config" value="$(arg core_tuning_config)" />
+  </include>
 
   <!-- Alternate estimator. The original fixed_camera_ibvs.launch remains
        unchanged and continues to use PX4/MAVROS state. -->
@@ -28,6 +33,7 @@
     <param name="detection_topic" value="$(arg detection_topic)" />
     <param name="enable_horizontal_control" value="$(arg enable_horizontal_control)" />
     <param name="enable_height_control" value="$(arg enable_height_control)" />
+    <param name="enable_camera_pitch_servo" value="$(arg enable_camera_pitch_servo)" />
     <param name="V_default" value="$(arg forward_speed_mps)" />
     <param name="lost_forward_speed" value="$(arg lost_forward_speed_mps)" />
     <param name="pose_topic" value="/inslib/local_position/pose" />

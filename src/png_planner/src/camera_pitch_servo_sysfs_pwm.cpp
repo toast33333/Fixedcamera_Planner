@@ -78,8 +78,10 @@ class CameraPitchServoSysfsPwm {
                             expected_of_fullname_, "/pwm@2add0000");
     pnh_.param("camera_pitch_servo_pwm_channel", pwm_channel_, 0);
     pnh_.param("camera_pitch_servo_pwm_period_us", pwm_period_us_, 20000);
-    pnh_.param("camera_pitch_servo_pwm_min_us", pwm_min_us_, 500);
-    pnh_.param("camera_pitch_servo_pwm_max_us", pwm_max_us_, 2500);
+    pnh_.param("camera_pitch_servo_pwm_min_us", pwm_min_us_, 1000);
+    pnh_.param("camera_pitch_servo_pwm_max_us", pwm_max_us_, 2000);
+    pnh_.param<std::string>("camera_pitch_servo_pwm_polarity", pwm_polarity_,
+                            "normal");
     pnh_.param("camera_pitch_servo_hardware_command_timeout_sec",
                hardware_command_timeout_sec_, 0.3);
 
@@ -131,6 +133,10 @@ class CameraPitchServoSysfsPwm {
     if (pwm_channel_ < 0 || pwm_period_us_ <= 0 || pwm_min_us_ <= 0 ||
         pwm_min_us_ >= pwm_max_us_ || pwm_max_us_ >= pwm_period_us_) {
       throw std::runtime_error("invalid camera pitch sysfs PWM parameters");
+    }
+    if (pwm_polarity_ != "normal" && pwm_polarity_ != "inversed") {
+      throw std::runtime_error(
+          "camera_pitch_servo_pwm_polarity must be normal or inversed");
     }
     if (!std::isfinite(hardware_command_timeout_sec_) ||
         hardware_command_timeout_sec_ <= 0.0) {
@@ -346,12 +352,28 @@ class CameraPitchServoSysfsPwm {
       throw std::runtime_error("PWM channel did not appear after export");
     }
 
+    // The Rockchip PWM block needs a complete state initialization after each
+    // sysfs export.  Merely writing period/duty/enable can leave the sysfs
+    // values looking correct while GPIO0_B4_D emits no usable waveform.
+    // Match the board-proven sequence: disable, clear duty, set period and
+    // polarity, then apply the requested pulse and enable the channel.
+    const std::string period_ns = std::to_string(pwm_period_us_ * 1000);
+    const std::string initial_duty_ns =
+        std::to_string(initial_pulse_us * 1000);
     writeTextFile(channel_path_ + "/enable", "0");
-    writeTextFile(channel_path_ + "/period",
-                  std::to_string(pwm_period_us_ * 1000));
-    writeTextFile(channel_path_ + "/duty_cycle",
-                  std::to_string(initial_pulse_us * 1000));
+    writeTextFile(channel_path_ + "/duty_cycle", "0");
+    writeTextFile(channel_path_ + "/period", period_ns);
+    writeTextFile(channel_path_ + "/polarity", pwm_polarity_);
+    writeTextFile(channel_path_ + "/duty_cycle", initial_duty_ns);
     writeTextFile(channel_path_ + "/enable", "1");
+
+    if (trim(readTextFile(channel_path_ + "/enable")) != "1" ||
+        trim(readTextFile(channel_path_ + "/period")) != period_ns ||
+        trim(readTextFile(channel_path_ + "/polarity")) != pwm_polarity_ ||
+        trim(readTextFile(channel_path_ + "/duty_cycle")) != initial_duty_ns) {
+      throw std::runtime_error(
+          "camera pitch PWM sysfs readback does not match requested state");
+    }
     hardware_active_ = true;
     publishState();
     ROS_WARN("Camera pitch PWM hardware output ACTIVE on %s/pwm%d",
@@ -363,6 +385,7 @@ class CameraPitchServoSysfsPwm {
     if (!channel_path_.empty() && pathExists(channel_path_ + "/enable")) {
       try {
         writeTextFile(channel_path_ + "/enable", "0");
+        writeTextFile(channel_path_ + "/duty_cycle", "0");
       } catch (const std::exception& error) {
         first_error = error.what();
       }
@@ -405,8 +428,9 @@ class CameraPitchServoSysfsPwm {
   std::string channel_path_;
   int pwm_channel_{0};
   int pwm_period_us_{20000};
-  int pwm_min_us_{500};
-  int pwm_max_us_{2500};
+  int pwm_min_us_{1000};
+  int pwm_max_us_{2000};
+  std::string pwm_polarity_{"normal"};
   double hardware_command_timeout_sec_{0.3};
   bool mapper_enabled_{false};
   bool have_mapper_enabled_state_{false};

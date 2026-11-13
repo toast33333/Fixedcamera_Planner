@@ -1,0 +1,74 @@
+<launch>
+  <!-- Single-aircraft entry point. The aircraft must already be airborne and
+       in a mode that accepts MAVROS velocity setpoints. -->
+  <arg name="minimum_speed" default="5.0" />
+  <arg name="maximum_speed" default="15.0" />
+  <arg name="speed_step" default="2.0" />
+  <arg name="start_radius" default="20.0" />
+  <arg name="radial_rate" default="0.5" />
+  <arg name="trajectory_error_limit" default="3.0" />
+  <arg name="return_tolerance" default="1.0" />
+  <arg name="return_timeout" default="30.0" />
+  <arg name="entry_tolerance" default="0.8" />
+  <arg name="entry_timeout" default="30.0" />
+  <arg name="positioning_speed" default="3.0" />
+  <arg name="position_kp" default="1.0" />
+  <arg name="correction_speed_limit" default="2.0" />
+  <arg name="altitude_kp" default="1.0" />
+  <arg name="max_vertical_speed" default="1.0" />
+  <arg name="yaw_kp" default="1.5" />
+  <arg name="max_yaw_rate" default="1.0" />
+  <arg name="center_tolerance" default="0.5" />
+  <arg name="geofence_radius" default="50.0" />
+  <arg name="geofence_margin" default="5.0" />
+  <arg name="stop_buffer" default="3.0" />
+  <arg name="clockwise" default="false" />
+  <arg name="start_delay" default="3.0" />
+  <arg name="position_timeout" default="0.5" />
+  <arg name="rate" default="20.0" />
+  <arg name="require_start_signal" default="false" />
+  <arg name="pose_topic" default="/mavros/local_position/pose" />
+  <arg name="velocity_topic" default="/mavros/setpoint_velocity/cmd_vel" />
+  <arg name="velocity_feedback_topic" default="/mavros/local_position/velocity_local" />
+  <arg name="start_topic" default="/circle_trajectory/start" />
+  <arg name="status_topic" default="/circle_trajectory/status" />
+  <arg name="finished_topic" default="/circle_trajectory/finished" />
+  <arg name="csv_path" default="circle_trajectory_test.csv" />
+
+  <node pkg="png_planner" type="circle_trajectory_test"
+        name="circle_trajectory_test" output="screen" required="true">
+    <param name="minimum_speed" value="$(arg minimum_speed)" />
+    <param name="maximum_speed" value="$(arg maximum_speed)" />
+    <param name="speed_step" value="$(arg speed_step)" />
+    <param name="start_radius" value="$(arg start_radius)" />
+    <param name="radial_rate" value="$(arg radial_rate)" />
+    <param name="trajectory_error_limit" value="$(arg trajectory_error_limit)" />
+    <param name="return_tolerance" value="$(arg return_tolerance)" />
+    <param name="return_timeout" value="$(arg return_timeout)" />
+    <param name="entry_tolerance" value="$(arg entry_tolerance)" />
+    <param name="entry_timeout" value="$(arg entry_timeout)" />
+    <param name="positioning_speed" value="$(arg positioning_speed)" />
+    <param name="position_kp" value="$(arg position_kp)" />
+    <param name="correction_speed_limit" value="$(arg correction_speed_limit)" />
+    <param name="altitude_kp" value="$(arg altitude_kp)" />
+    <param name="max_vertical_speed" value="$(arg max_vertical_speed)" />
+    <param name="yaw_kp" value="$(arg yaw_kp)" />
+    <param name="max_yaw_rate" value="$(arg max_yaw_rate)" />
+    <param name="center_tolerance" value="$(arg center_tolerance)" />
+    <param name="geofence_radius" value="$(arg geofence_radius)" />
+    <param name="geofence_margin" value="$(arg geofence_margin)" />
+    <param name="stop_buffer" value="$(arg stop_buffer)" />
+    <param name="clockwise" value="$(arg clockwise)" />
+    <param name="start_delay" value="$(arg start_delay)" />
+    <param name="position_timeout" value="$(arg position_timeout)" />
+    <param name="rate" value="$(arg rate)" />
+    <param name="require_start_signal" value="$(arg require_start_signal)" />
+    <param name="pose_topic" value="$(arg pose_topic)" />
+    <param name="velocity_topic" value="$(arg velocity_topic)" />
+    <param name="velocity_feedback_topic" value="$(arg velocity_feedback_topic)" />
+    <param name="start_topic" value="$(arg start_topic)" />
+    <param name="status_topic" value="$(arg status_topic)" />
+    <param name="finished_topic" value="$(arg finished_topic)" />
+    <param name="csv_path" value="$(arg csv_path)" />
+  </node>
+</launch>

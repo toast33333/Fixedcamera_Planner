@@ -4,6 +4,19 @@
   <arg name="core_tuning_config" default="$(find png_planner)/config/core_tuning.yaml" />
   <arg name="detection_mode" default="1" />
   <arg name="detection_topic" default="/object_detections" />
+  <!-- Prepared for field validation, deliberately OFF by default. -->
+  <arg name="enable_radar_approach_servo" default="false" />
+  <arg name="radar_servo_visual_candidate_topic"
+       default="/fixed_camera_ibvs/camera_pitch_servo_candidate_deg" />
+
+  <!-- Even when the feature is explicitly enabled, the hardware launch starts
+       with both PWM safety gates OFF.  It never moves a servo merely because
+       this launch file was started. -->
+  <group if="$(arg enable_radar_approach_servo)">
+    <include file="$(find png_planner)/launch/camera_pitch_servo_hardware.launch">
+      <arg name="config" value="$(arg core_tuning_config)" />
+    </include>
+  </group>
 
   <!-- The timestamped visual controller output is a candidate only, so it
        cannot conflict with the approach command. -->
@@ -17,6 +30,13 @@
     <param name="detection_topic" value="$(arg detection_topic)" />
     <param name="command_topic" value="/fixed_camera_ibvs/cmd_vel_candidate" />
     <param name="enable_forward_speed_topic" value="true" />
+    <param name="enable_camera_pitch_servo"
+           value="$(arg enable_radar_approach_servo)" />
+    <param name="camera_pitch_servo_command_topic"
+           value="$(arg radar_servo_visual_candidate_topic)" />
+    <param name="camera_pitch_servo_use_feedback" value="true" />
+    <param name="camera_pitch_servo_feedback_topic"
+           value="/camera_pitch_servo/feedback_deg" />
   </node>
 
   <!-- Sole owner of /mavros/setpoint_velocity/cmd_vel. Before handover it
@@ -29,5 +49,9 @@
     <rosparam command="load" file="$(arg core_tuning_config)" />
     <param name="detection_mode" value="$(arg detection_mode)" />
     <param name="detection_topic" value="$(arg detection_topic)" />
+    <param name="enable_radar_approach_servo"
+           value="$(arg enable_radar_approach_servo)" />
+    <param name="radar_servo_visual_candidate_topic"
+           value="$(arg radar_servo_visual_candidate_topic)" />
   </node>
 </launch>

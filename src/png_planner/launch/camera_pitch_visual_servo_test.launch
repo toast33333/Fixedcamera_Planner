@@ -1,0 +1,45 @@
+<launch>
+  <!--
+    Pilot-flown visual/servo test.
+
+    This launch keeps the real camera detection, timestamp-aligned IMU/LOS,
+    aircraft-attitude compensation and camera-pitch servo path.  Aircraft
+    guidance is explicitly disabled inside the controller, so this node does
+    not advertise or publish a MAVROS velocity-command topic.
+  -->
+  <arg name="config" default="$(find png_planner)/config/fixed_camera_ibvs.yaml" />
+  <arg name="core_tuning_config" default="$(find png_planner)/config/core_tuning.yaml" />
+  <arg name="detection_topic" default="/object_detections" />
+  <arg name="pose_topic" default="/mavros/local_position/pose" />
+  <arg name="attitude_topic" default="/mavros/imu/data" />
+
+  <include file="$(find png_planner)/launch/camera_pitch_servo_hardware.launch">
+    <arg name="config" value="$(arg core_tuning_config)" />
+  </include>
+
+  <node pkg="png_planner"
+        type="fixed_camera_ibvs"
+        name="camera_pitch_visual_tracker"
+        output="screen">
+    <rosparam command="load" file="$(arg config)" />
+    <rosparam command="load" file="$(arg core_tuning_config)" />
+
+    <param name="detection_mode" value="1" />
+    <param name="detection_topic" value="$(arg detection_topic)" />
+    <param name="pose_topic" value="$(arg pose_topic)" />
+    <param name="attitude_topic" value="$(arg attitude_topic)" />
+
+    <!-- Hard safety boundary: no aircraft guidance calculation or output. -->
+    <param name="enable_flight_control" value="false" />
+    <param name="enable_horizontal_control" value="false" />
+    <param name="enable_height_control" value="false" />
+    <param name="enable_forward_speed_topic" value="false" />
+    <param name="enable_state_valid_topic" value="false" />
+    <param name="V_default" value="0.0" />
+    <param name="lost_forward_speed" value="0.0" />
+
+    <param name="enable_attitude_compensation" value="true" />
+    <param name="use_pose_orientation" value="false" />
+    <param name="enable_camera_pitch_servo" value="true" />
+  </node>
+</launch>

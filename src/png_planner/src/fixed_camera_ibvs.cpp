@@ -93,15 +93,31 @@ public:
                  "lateral PN velocity=removed, vertical=%s.",
                  enable_horizontal_control_ ? "enabled" : "disabled",
                  enable_height_control_ ? "enabled" : "disabled");
-        ROS_INFO("[FixedCameraIBVS] Pose=%s; detection capture timestamps are "
-                 "aligned to IMU history (no fixed image-delay estimate). "
-                 "FOV limits: horizontal +/-%.1f deg, vertical +/-%.1f deg.",
-                 pose_topic_.c_str(),
-                 fov_horizontal_limit_deg_, fov_vertical_limit_deg_);
+        ROS_INFO("[FixedCameraIBVS] Aircraft flight-control output: %s.",
+                 enable_flight_control_
+                     ? command_topic_.c_str()
+                     : "disabled (visual-to-servo only)");
+        if (use_detection_header_stamp_) {
+            ROS_INFO("[FixedCameraIBVS] Pose=%s; visual/IMU alignment uses "
+                     "Detection.header.stamp. FOV limits: horizontal +/-%.1f "
+                     "deg, vertical +/-%.1f deg.",
+                     pose_topic_.c_str(), fov_horizontal_limit_deg_,
+                     fov_vertical_limit_deg_);
+        } else {
+            ROS_WARN("[FixedCameraIBVS] FIELD FALLBACK active: visual/IMU "
+                     "alignment ignores Detection.header.stamp and uses "
+                     "receipt time minus %.3f s. FOV limits: horizontal "
+                     "+/-%.1f deg, vertical +/-%.1f deg.",
+                     image_delay_sec_, fov_horizontal_limit_deg_,
+                     fov_vertical_limit_deg_);
+        }
         ROS_INFO("[FixedCameraIBVS] Additive FOV guard: inactive in central "
-                 "%.1f%% image area; yaw gain=%.2f rad/s, vertical gain=%.2f "
-                 "m/s, shape cap=%.2f.",
+                 "%.1f%% image area; enabled=%s, requires detection score > "
+                 "%.2f; yaw gain=%.2f rad/s, vertical gain=%.2f m/s, "
+                 "shape cap=%.2f.",
                  100.0 * fov_guard_center_area_ratio_,
+                 enable_fov_guard_ ? "true" : "false",
+                 fov_guard_min_detection_score_,
                  fov_guard_yaw_gain_radps_, fov_guard_vertical_gain_mps_,
                  fov_guard_shape_max_);
         if (enable_camera_pitch_servo_) {
@@ -239,6 +255,17 @@ private:
                  camera_pitch_servo_return_on_loss_, true);
         nh.param("camera_pitch_servo_return_rate_degps",
                  camera_pitch_servo_return_rate_degps_, 20.0);
+        nh.param("camera_pitch_servo_axis_compensation_enabled",
+                 camera_pitch_servo_axis_compensation_enabled_, true);
+        // Physical hinge axis in the neutral mount frame after the optical-to-
+        // body basis conversion: +x forward, +y left, +z up. The default
+        // [0, 1, 0] is the conventional lateral pitch axis.
+        nh.param("camera_pitch_servo_axis_mount_x",
+                 camera_pitch_servo_axis_mount_x_, 0.0);
+        nh.param("camera_pitch_servo_axis_mount_y",
+                 camera_pitch_servo_axis_mount_y_, 1.0);
+        nh.param("camera_pitch_servo_axis_mount_z",
+                 camera_pitch_servo_axis_mount_z_, 0.0);
 
         nh.param("V_default", forward_speed_, 5.0);
         nh.param("lost_forward_speed", lost_forward_speed_, forward_speed_);
@@ -258,6 +285,7 @@ private:
 
         nh.param("enable_horizontal_control", enable_horizontal_control_, true);
         nh.param("enable_height_control", enable_height_control_, true);
+        nh.param("enable_flight_control", enable_flight_control_, true);
         nh.param("k_z_ff", vertical_position_gain_, 1.0);
         nh.param("N_nav_z", vertical_navigation_gain_, 2.0);
         nh.param("max_vz", max_vertical_velocity_, 2.0);
@@ -281,6 +309,9 @@ private:
                  0.5 * legacy_vfov_deg * legacy_margin_ratio);
         nh.param("fov_guard_center_area_ratio",
                  fov_guard_center_area_ratio_, 0.50);
+        nh.param("enable_fov_guard", enable_fov_guard_, true);
+        nh.param("fov_guard_min_detection_score",
+                 fov_guard_min_detection_score_, 0.50);
         double legacy_fov_barrier_gain = 0.20;
         double legacy_fov_barrier_max = 4.0;
         nh.param("fov_barrier_gain", legacy_fov_barrier_gain, 0.20);
@@ -301,6 +332,9 @@ private:
         nh.param("use_real_dt", use_real_dt_, true);
         nh.param("step_dt", step_dt_, 0.02);
         nh.param("lost_timeout", lost_timeout_sec_, 0.30);
+        nh.param("use_detection_header_stamp",
+                 use_detection_header_stamp_, true);
+        nh.param("image_delay_sec", image_delay_sec_, 0.08);
         nh.param("max_los_prediction_sec", max_los_prediction_sec_, 0.25);
         nh.param("pose_history_sec", pose_history_sec_, 1.0);
         nh.param("enable_attitude_compensation", enable_attitude_compensation_, true);
@@ -353,6 +387,18 @@ private:
                               fov_correction_debug_topic_,
                               "/fixed_camera_ibvs/fov_correction");
 
+        // Servo-only tests reuse the timestamp-aligned LOS and attitude
+        // compensation, but must never calculate or publish aircraft control.
+        // Enforce that invariant here instead of relying only on launch values.
+        if (!enable_flight_control_) {
+            enable_horizontal_control_ = false;
+            enable_height_control_ = false;
+            enable_forward_speed_topic_ = false;
+            enable_state_valid_topic_ = false;
+            forward_speed_ = 0.0;
+            lost_forward_speed_ = 0.0;
+        }
+
         fx_ = std::max(fx_, 1.0);
         fy_ = std::max(fy_, 1.0);
         min_forward_speed_ = std::max(min_forward_speed_, 0.0);
@@ -379,6 +425,8 @@ private:
             camera_vertical_half_fov_rad_, degToRad(1.0), degToRad(89.0));
         fov_guard_center_area_ratio_ = clampValue(
             fov_guard_center_area_ratio_, 0.0, 0.99);
+        fov_guard_min_detection_score_ = clampValue(
+            fov_guard_min_detection_score_, 0.0, 1.0);
         fov_guard_yaw_gain_radps_ = std::max(fov_guard_yaw_gain_radps_, 0.0);
         fov_guard_vertical_gain_mps_ =
             std::max(fov_guard_vertical_gain_mps_, 0.0);
@@ -412,11 +460,26 @@ private:
             std::max(camera_pitch_servo_max_rate_degps_, 0.0);
         camera_pitch_servo_return_rate_degps_ =
             std::max(camera_pitch_servo_return_rate_degps_, 0.0);
+        tf::Vector3 configured_servo_axis(
+            camera_pitch_servo_axis_mount_x_,
+            camera_pitch_servo_axis_mount_y_,
+            camera_pitch_servo_axis_mount_z_);
+        if (configured_servo_axis.length2() < 1e-12) {
+            ROS_WARN("[FixedCameraIBVS] Camera pitch servo axis is zero; "
+                     "falling back to the neutral-mount +y axis.");
+            configured_servo_axis = tf::Vector3(0.0, 1.0, 0.0);
+        }
+        configured_servo_axis.normalize();
+        camera_pitch_servo_axis_mount_x_ = configured_servo_axis.x();
+        camera_pitch_servo_axis_mount_y_ = configured_servo_axis.y();
+        camera_pitch_servo_axis_mount_z_ = configured_servo_axis.z();
         control_rate_hz_ = std::max(control_rate_hz_, 1.0);
         step_dt_ = std::max(step_dt_, 1e-3);
         lost_timeout_sec_ = std::max(lost_timeout_sec_, 0.02);
+        image_delay_sec_ = std::max(image_delay_sec_, 0.0);
         max_los_prediction_sec_ = std::max(max_los_prediction_sec_, 0.0);
-        pose_history_sec_ = std::max(pose_history_sec_, 0.2);
+        pose_history_sec_ =
+            std::max(pose_history_sec_, image_delay_sec_ + 0.2);
     }
 
     void configureCameraMount() {
@@ -452,9 +515,12 @@ private:
                                  &FixedCameraIbvsController::poseCallback, this);
         attitude_sub_ = nh.subscribe(attitude_topic_, 50,
                                      &FixedCameraIbvsController::attitudeCallback, this);
-        velocity_sub_ = nh.subscribe(velocity_topic_, 5,
-                                     &FixedCameraIbvsController::velocityCallback, this);
-        if (enable_forward_speed_topic_) {
+        if (enable_flight_control_) {
+            velocity_sub_ = nh.subscribe(
+                velocity_topic_, 5,
+                &FixedCameraIbvsController::velocityCallback, this);
+        }
+        if (enable_flight_control_ && enable_forward_speed_topic_) {
             forward_speed_sub_ = nh.subscribe(
                 forward_speed_topic_, 1,
                 &FixedCameraIbvsController::forwardSpeedCallback, this);
@@ -470,13 +536,16 @@ private:
                 &FixedCameraIbvsController::cameraPitchServoFeedbackCallback,
                 this);
         }
-        command_pub_ = nh.advertise<geometry_msgs::TwistStamped>(command_topic_, 1);
         los_debug_pub_ = nh.advertise<geometry_msgs::Vector3Stamped>(los_debug_topic_, 1);
         fov_debug_pub_ = nh.advertise<geometry_msgs::Vector3Stamped>(fov_debug_topic_, 1);
-        nominal_command_debug_pub_ =
-            nh.advertise<geometry_msgs::TwistStamped>(nominal_command_debug_topic_, 1);
-        fov_correction_debug_pub_ =
-            nh.advertise<geometry_msgs::TwistStamped>(fov_correction_debug_topic_, 1);
+        if (enable_flight_control_) {
+            command_pub_ =
+                nh.advertise<geometry_msgs::TwistStamped>(command_topic_, 1);
+            nominal_command_debug_pub_ = nh.advertise<geometry_msgs::TwistStamped>(
+                nominal_command_debug_topic_, 1);
+            fov_correction_debug_pub_ = nh.advertise<geometry_msgs::TwistStamped>(
+                fov_correction_debug_topic_, 1);
+        }
         if (enable_camera_pitch_servo_) {
             camera_pitch_servo_command_pub_ =
                 nh.advertise<std_msgs::Float64>(
@@ -493,13 +562,29 @@ private:
             degToRad(camera_mount_roll_deg_),
             degToRad(camera_mount_pitch_deg_),
             degToRad(camera_mount_yaw_deg_));
-        tf::Matrix3x3 servo_rotation;
-        servo_rotation.setRPY(
-            0.0, degToRad(-servo_relative_upward_deg), 0.0);
-        // The actuator rotates about the camera mount's local pitch axis. This
-        // multiplication also remains correct if a later installation uses a
-        // non-zero fixed roll or yaw correction.
+        const tf::Vector3 servo_axis_mount(
+            camera_pitch_servo_axis_mount_x_,
+            camera_pitch_servo_axis_mount_y_,
+            camera_pitch_servo_axis_mount_z_);
+        const tf::Matrix3x3 servo_rotation(tf::Quaternion(
+            servo_axis_mount, degToRad(-servo_relative_upward_deg)));
+        // Rotate around the measured hinge axis in the neutral mount frame,
+        // then apply the fixed camera-to-aircraft installation rotation.
         return fixed_mount_rotation * servo_rotation;
+    }
+
+    tf::Vector3 cameraPitchServoAxisBody() const {
+        tf::Matrix3x3 fixed_mount_rotation;
+        fixed_mount_rotation.setRPY(
+            degToRad(camera_mount_roll_deg_),
+            degToRad(camera_mount_pitch_deg_),
+            degToRad(camera_mount_yaw_deg_));
+        return normalizedOr(
+            fixed_mount_rotation * tf::Vector3(
+                camera_pitch_servo_axis_mount_x_,
+                camera_pitch_servo_axis_mount_y_,
+                camera_pitch_servo_axis_mount_z_),
+            tf::Vector3(0.0, 1.0, 0.0));
     }
 
     tf::Vector3 cameraRayToBody(
@@ -651,7 +736,8 @@ private:
                 ROS_WARN_THROTTLE(
                     1.0,
                     "[FixedCameraIBVS] No IMU attitude available for the "
-                    "detection timestamp; dropping this visual measurement.");
+                    "selected visual measurement time; dropping this visual "
+                    "measurement.");
                 return;
             }
         } else {
@@ -775,17 +861,54 @@ private:
         camera_pitch_servo_rate_command_degps_ = 0.0;
     }
 
-    void updateCameraPitchServoTracking(const ros::Time& now,
-                                        double dt,
-                                        double predicted_input_v) {
-        if (!enable_camera_pitch_servo_) return;
-
-        // Positive image vertical error means that the target is above the
-        // requested image point.  Positive actuator command raises the camera,
-        // so the sign is intentionally positive here.
-        double error_deg = radToDeg(
+    double cameraPitchServoErrorDeg(
+        const tf::Vector3& los_body,
+        double current_servo_angle_deg,
+        double predicted_input_v) const {
+        const double image_vertical_error_deg = radToDeg(
             std::atan2(predicted_input_v, fy_) -
             std::atan2(desired_v_offset_px_, fy_));
+        if (!camera_pitch_servo_axis_compensation_enabled_) {
+            return image_vertical_error_deg;
+        }
+
+        const double desired_v_optical =
+            y_up_positive_ ? -desired_v_offset_px_ : desired_v_offset_px_;
+        const tf::Vector3 desired_camera(
+            desired_u_offset_px_ / fx_, desired_v_optical / fy_, 1.0);
+        const tf::Vector3 desired_body = cameraRayToBody(
+            desired_camera, current_servo_angle_deg);
+        const tf::Vector3 servo_axis_body = cameraPitchServoAxisBody();
+
+        // Only the components perpendicular to the hinge axis can be corrected
+        // by this single-axis actuator. The sign below matches the convention
+        // that a positive command raises the camera (implemented as a negative
+        // right-hand rotation in cameraMountRotation). This automatically
+        // includes aircraft attitude,
+        // fixed mount roll/pitch/yaw, and a non-ideal hinge-axis direction.
+        tf::Vector3 los_projected =
+            los_body - servo_axis_body * los_body.dot(servo_axis_body);
+        tf::Vector3 desired_projected = desired_body -
+            servo_axis_body * desired_body.dot(servo_axis_body);
+        if (los_projected.length2() < 1e-12 ||
+            desired_projected.length2() < 1e-12) {
+            return image_vertical_error_deg;
+        }
+        los_projected.normalize();
+        desired_projected.normalize();
+        const double sine = servo_axis_body.dot(
+            los_projected.cross(desired_projected));
+        const double cosine = clampValue(
+            los_projected.dot(desired_projected), -1.0, 1.0);
+        return radToDeg(std::atan2(sine, cosine));
+    }
+
+    void updateCameraPitchServoTracking(const ros::Time& now,
+                                        double dt,
+                                        double servo_error_deg) {
+        if (!enable_camera_pitch_servo_) return;
+
+        double error_deg = servo_error_deg;
         if (std::fabs(error_deg) <= camera_pitch_servo_deadband_deg_) {
             error_deg = 0.0;
             camera_pitch_servo_error_integral_deg_sec_ *=
@@ -881,10 +1004,20 @@ private:
         const double vertical_angle = std::atan2(los_camera.y(), los_camera.z());
         const double horizontal_ratio = std::fabs(horizontal_angle) / safe_h;
         const double vertical_ratio = std::fabs(vertical_angle) / safe_v;
+        // Nominal interception may continue to use every detection accepted by
+        // minimum_detection_score.  The additive FOV guard is deliberately
+        // stricter: a box with score <= the threshold must not create a guard
+        // command, slow the aircraft, or trigger the emergency-yaw branch.
+        const bool fov_guard_detection_qualified =
+            enable_fov_guard_ &&
+            static_cast<double>(last_detection_.score) >
+                fov_guard_min_detection_score_;
         const double active_horizontal_ratio =
-            enable_horizontal_control_ ? horizontal_ratio : 0.0;
+            (fov_guard_detection_qualified && enable_horizontal_control_)
+                ? horizontal_ratio : 0.0;
         const double active_vertical_ratio =
-            (enable_height_control_ || enable_camera_pitch_servo_)
+            (fov_guard_detection_qualified &&
+             (enable_height_control_ || enable_camera_pitch_servo_))
                 ? vertical_ratio : 0.0;
         const double fov_ratio =
             std::max(active_horizontal_ratio, active_vertical_ratio);
@@ -917,12 +1050,14 @@ private:
             fx_ * std::tan(camera_horizontal_half_fov_rad_), 1.0);
         const double vertical_view_half_extent_px = std::max(
             fy_ * std::tan(camera_vertical_half_fov_rad_), 1.0);
-        const double horizontal_guard_shape = enable_horizontal_control_
+        const double horizontal_guard_shape =
+            (fov_guard_detection_qualified && enable_horizontal_control_)
             ? computeAxisFovBarrierShape(
                   horizontal_pixel_error, horizontal_view_half_extent_px)
             : 0.0;
         const double vertical_guard_shape =
-            (enable_height_control_ || enable_camera_pitch_servo_)
+            (fov_guard_detection_qualified &&
+             (enable_height_control_ || enable_camera_pitch_servo_))
             ? computeAxisFovBarrierShape(
                   vertical_pixel_error, vertical_view_half_extent_px)
             : 0.0;
@@ -936,7 +1071,24 @@ private:
         const double speed_scale = fov_guard_active
             ? computeForwardSpeedScale(fov_ratio) : 1.0;
 
-        updateCameraPitchServoTracking(now, dt, predicted_input_v);
+        const double servo_error_deg = cameraPitchServoErrorDeg(
+            los_body, current_camera_pitch_deg, predicted_input_v);
+        // Servo tracking follows every detection accepted by the nominal
+        // detection gate.  fov_guard_min_detection_score only gates the
+        // additive aircraft FOV-guard correction and must not freeze the
+        // camera servo or couple it to enable_fov_guard.
+        if (enable_camera_pitch_servo_) {
+            updateCameraPitchServoTracking(now, dt, servo_error_deg);
+        }
+
+        // Manual-flight visual/servo tests end here.  They deliberately keep
+        // the real detection, time alignment, LOS and attitude-compensated
+        // servo path while omitting all aircraft-guidance calculations.
+        if (!enable_flight_control_) {
+            publishDebug(now, los_world, horizontal_ratio, vertical_ratio,
+                         fov_guard_shape);
+            return;
+        }
 
         updateYawEnableState();
         const bool fov_emergency = fov_ratio >= fov_emergency_yaw_ratio_;
@@ -1084,6 +1236,7 @@ private:
                              double left,
                              double up,
                              double yaw_rate) {
+        if (!enable_flight_control_) return;
         command_pub_.publish(makeBodyVelocityCommand(
             stamp, forward, left, up, yaw_rate));
     }
@@ -1098,6 +1251,7 @@ private:
         double nominal_left,
         double nominal_up,
         double nominal_yaw_rate) {
+        if (!enable_flight_control_) return;
         const geometry_msgs::TwistStamped actual = makeBodyVelocityCommand(
             stamp, actual_forward, actual_left, actual_up, actual_yaw_rate);
         const geometry_msgs::TwistStamped nominal = makeBodyVelocityCommand(
@@ -1174,20 +1328,36 @@ private:
         last_detection_.track_id = message.track_id;
         last_detection_.is_tracking = message.is_tracking;
         last_detection_receipt_time_ = receipt_time;
-        last_detection_capture_time_ = capture_stamp;
-        if (last_detection_capture_time_.isZero()) {
-            last_detection_capture_time_ = receipt_time;
-            ROS_WARN_THROTTLE(
-                2.0,
-                "[FixedCameraIBVS] Detection header stamp is zero; using "
-                "receipt time without a fixed delay estimate.");
-        } else if (last_detection_capture_time_ >
-                   receipt_time + ros::Duration(0.05)) {
-            ROS_WARN_THROTTLE(
-                2.0,
-                "[FixedCameraIBVS] Detection timestamp is in the future; "
-                "check ROS clock synchronization. Using receipt time.");
-            last_detection_capture_time_ = receipt_time;
+        if (!use_detection_header_stamp_) {
+            // Former field behaviour: the only time reference is message
+            // receipt, so move it backwards by the configured fixed estimate.
+            // Guard very early simulated time to avoid subtracting below zero.
+            if (image_delay_sec_ > 0.0 &&
+                receipt_time.toSec() > image_delay_sec_) {
+                last_detection_capture_time_ =
+                    receipt_time - ros::Duration(image_delay_sec_);
+            } else {
+                last_detection_capture_time_ = receipt_time;
+            }
+        } else {
+            last_detection_capture_time_ = capture_stamp;
+            if (last_detection_capture_time_.isZero()) {
+                last_detection_capture_time_ = receipt_time;
+                ROS_WARN_THROTTLE(
+                    2.0,
+                    "[FixedCameraIBVS] Detection header stamp is zero; using "
+                    "receipt time. Set use_detection_header_stamp=false to "
+                    "activate the configured fixed-delay fallback.");
+            } else if (last_detection_capture_time_ >
+                       receipt_time + ros::Duration(0.05)) {
+                ROS_WARN_THROTTLE(
+                    2.0,
+                    "[FixedCameraIBVS] Detection timestamp is in the future; "
+                    "check ROS clock synchronization. Using receipt time. Set "
+                    "use_detection_header_stamp=false to activate the "
+                    "configured fixed-delay fallback.");
+                last_detection_capture_time_ = receipt_time;
+            }
         }
         have_detection_ =
             message.is_tracking && message.score >= minimum_detection_score_;
@@ -1195,8 +1365,8 @@ private:
     }
 
     void detectionCallbackKcf(const kcf_msgs::Bbox::ConstPtr& message) {
-        // Legacy Bbox has no Header. Keep it usable, but it can only align to
-        // receipt time and therefore receives no assumed 0.08 s correction.
+        // Legacy Bbox has no Header. In timestamp mode this degrades to receipt
+        // time; in fixed-delay mode acceptDetection applies image_delay_sec.
         acceptDetection(*message, ros::Time::now());
     }
 
@@ -1315,6 +1485,10 @@ private:
     double camera_pitch_servo_deadband_deg_ = 0.4;
     double camera_pitch_servo_max_rate_degps_ = 60.0;
     double camera_pitch_servo_return_rate_degps_ = 20.0;
+    bool camera_pitch_servo_axis_compensation_enabled_ = true;
+    double camera_pitch_servo_axis_mount_x_ = 0.0;
+    double camera_pitch_servo_axis_mount_y_ = 1.0;
+    double camera_pitch_servo_axis_mount_z_ = 0.0;
     double camera_pitch_servo_command_deg_ = 0.0;
     double camera_pitch_servo_feedback_deg_ = 0.0;
     double camera_pitch_servo_error_integral_deg_sec_ = 0.0;
@@ -1346,6 +1520,7 @@ private:
 
     bool enable_horizontal_control_ = true;
     bool enable_height_control_ = true;
+    bool enable_flight_control_ = true;
     double vertical_position_gain_ = 1.0;
     double vertical_navigation_gain_ = 2.0;
     double max_vertical_velocity_ = 2.0;
@@ -1358,6 +1533,8 @@ private:
     double camera_horizontal_half_fov_rad_ = degToRad(26.6);
     double camera_vertical_half_fov_rad_ = degToRad(20.6);
     double fov_guard_center_area_ratio_ = 0.50;
+    bool enable_fov_guard_ = true;
+    double fov_guard_min_detection_score_ = 0.50;
     double fov_guard_yaw_gain_radps_ = 0.20;
     double fov_guard_vertical_gain_mps_ = 0.20;
     double fov_guard_shape_max_ = 4.0;
@@ -1371,6 +1548,8 @@ private:
     bool use_real_dt_ = true;
     double step_dt_ = 0.02;
     double lost_timeout_sec_ = 0.30;
+    bool use_detection_header_stamp_ = true;
+    double image_delay_sec_ = 0.08;
     double max_los_prediction_sec_ = 0.25;
     double pose_history_sec_ = 1.0;
     bool enable_attitude_compensation_ = true;
